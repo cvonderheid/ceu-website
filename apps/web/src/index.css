@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: 225 26% 14%;
+  --mist: 210 40% 96%;
+  --accent: 30 95% 56%;
+  --accent-2: 198 85% 50%;
+  --surface: 0 0% 100%;
+  --stroke: 222 18% 82%;
+  --success: 150 60% 40%;
+  --warning: 35 90% 55%;
+  --danger: 2 75% 56%;
+}
+
+* {
+  @apply border-stroke;
+}
+
+body {
+  @apply bg-mist text-ink font-body antialiased;
+}
+
+h1, h2, h3, h4 {
+  @apply font-display;
+}
+
+.app-shell {
+  background: radial-gradient(circle at top, hsla(30, 95%, 56%, 0.08), transparent 55%),
+    linear-gradient(120deg, hsla(198, 85%, 50%, 0.08), transparent 35%),
+    linear-gradient(180deg, #f7f4f0 0%, #eef3f7 60%, #f4f6fb 100%);
+}
+
+.card-sheen {
+  background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.9), hsla(0, 0%, 100%, 0.7));
+  backdrop-filter: blur(10px);
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

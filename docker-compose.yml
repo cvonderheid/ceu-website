@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ce_tracker
+      POSTGRES_USER: ce_user
+      POSTGRES_PASSWORD: ce_pass
+    volumes:
+      - ce_pgdata:/var/lib/postgresql/data
+  api:
+    build:
+      context: ./apps/api
+    volumes:
+      - ./apps/api:/app
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql+psycopg://ce_user:ce_pass@db:5432/ce_tracker
+    depends_on:
+      - db
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    environment:
+      DATABASE_URL: postgresql+psycopg://ce_user:ce_pass@db:5432/ce_tracker
+      DEV_USER_ID: ${DEV_USER_ID-}
+      DEV_EMAIL: ${DEV_EMAIL-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+volumes:
+  ce_pgdata:
