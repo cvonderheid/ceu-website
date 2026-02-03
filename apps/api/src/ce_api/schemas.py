@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -157,6 +157,75 @@ class ProgressOut(BaseModel):
     days_remaining: int
     status: str
     warnings: List[ProgressWarning]
+
+
+class TimelineCertificate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    filename: str
+    content_type: Optional[str]
+    size_bytes: Optional[int]
+    created_at: datetime
+
+
+class TimelineCourse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    title: str
+    provider: Optional[str]
+    completed_at: date
+    hours: Decimal
+    has_certificate: bool
+    certificates: List[TimelineCertificate]
+
+
+class TimelineCycle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    state_license_id: uuid.UUID
+    state_code: str
+    cycle_start: date
+    cycle_end: date
+    required_hours: Decimal
+    earned_hours: Decimal
+    remaining_hours: Decimal
+    percent: Decimal
+    days_remaining: int
+    status: str
+    warnings: List[ProgressWarning]
+    courses: List[TimelineCourse]
+
+
+class TimelineState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state_code: str
+    license_number: Optional[str]
+    cycles: List[TimelineCycle]
+
+
+class TimelineResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    states: List[TimelineState]
+
+
+class TimelineEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    kind: str
+    occurred_at: date
+    state_code: Optional[str] = None
+    cycle_id: Optional[uuid.UUID] = None
+    course_id: Optional[uuid.UUID] = None
+    title: str
+    subtitle: Optional[str] = None
+    badges: Optional[List[str]] = None
+    meta: Optional[Dict[str, object]] = None
 
 
 class CertificateOut(BaseModel):

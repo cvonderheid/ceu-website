@@ -6,6 +6,8 @@ import type {
   LicenseCycle,
   ProgressRow,
   StateLicense,
+  TimelineEvent,
+  TimelineResponse,
   UserMe,
 } from "@/lib/types";
 
@@ -167,4 +169,10 @@ export const api = {
     apiFetch<void>(`/api/certificates/${id}`, { method: "DELETE" }),
 
   getProgress: () => apiFetch<ProgressRow[]>("/api/progress"),
+  getTimeline: (params?: { from?: string; to?: string }) =>
+    apiFetch<TimelineResponse>(`/api/timeline${toQuery({ from: params?.from, to: params?.to })}`),
+  getTimelineEvents: (params?: { from?: string; to?: string; state?: string }) =>
+    apiFetch<TimelineEvent[]>(
+      `/api/timeline/events${toQuery({ from: params?.from, to: params?.to, state: params?.state })}`
+    ),
 };

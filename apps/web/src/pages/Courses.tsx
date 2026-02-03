@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileUp, Link2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,7 @@ export default function Courses() {
   const [applySheetOpen, setApplySheetOpen] = useState(false);
   const [applyCourse, setApplyCourse] = useState<Course | null>(null);
   const [selectedCycleIds, setSelectedCycleIds] = useState<string[]>([]);
+  const [didInitSelections, setDidInitSelections] = useState(false);
 
   const [certSheetOpen, setCertSheetOpen] = useState(false);
   const [certCourse, setCertCourse] = useState<Course | null>(null);
@@ -50,6 +51,12 @@ export default function Courses() {
     queryKey: ["certificates", certCourse?.id],
     queryFn: () => api.listCertificates(certCourse!.id),
     enabled: Boolean(certCourse?.id),
+  });
+
+  const allocationsQuery = useQuery({
+    queryKey: ["allocations", applyCourse?.id],
+    queryFn: () => api.listAllocations({ course_id: applyCourse!.id }),
+    enabled: Boolean(applyCourse?.id),
   });
 
   const cyclesByLicense = useMemo(() => {
@@ -99,11 +106,14 @@ export default function Courses() {
     mutationFn: api.bulkAllocate,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["progress"] });
+      queryClient.invalidateQueries({ queryKey: ["allocations", applyCourse?.id] });
       toast.success(
         `Applied to ${result.created.length} cycles. Skipped ${result.skipped_cycle_ids.length}.`
       );
       setApplySheetOpen(false);
       setSelectedCycleIds([]);
+      setApplyCourse(null);
+      setDidInitSelections(false);
     },
     onError: (error: any) => toast.error(error?.details || "Failed to apply course"),
   });
@@ -141,6 +151,7 @@ export default function Courses() {
   const openApplySheet = (course: Course) => {
     setApplyCourse(course);
     setSelectedCycleIds([]);
+    setDidInitSelections(false);
     setApplySheetOpen(true);
   };
 
@@ -148,6 +159,17 @@ export default function Courses() {
     setCertCourse(course);
     setCertSheetOpen(true);
   };
+
+  useEffect(() => {
+    if (!applySheetOpen || !applyCourse || didInitSelections) {
+      return;
+    }
+    if (!allocationsQuery.data) {
+      return;
+    }
+    setSelectedCycleIds(allocationsQuery.data.map((allocation) => allocation.license_cycle_id));
+    setDidInitSelections(true);
+  }, [applyCourse, applySheetOpen, allocationsQuery.data, didInitSelections]);
 
   return (
     <div>
@@ -284,13 +306,26 @@ export default function Courses() {
         ))}
       </div>
 
-      <Sheet open={applySheetOpen} onOpenChange={setApplySheetOpen}>
+      <Sheet
+        open={applySheetOpen}
+        onOpenChange={(open) => {
+          setApplySheetOpen(open);
+          if (!open) {
+            setApplyCourse(null);
+            setSelectedCycleIds([]);
+            setDidInitSelections(false);
+          }
+        }}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Apply course to cycles</SheetTitle>
             <SheetDescription>{applyCourse?.title}</SheetDescription>
           </SheetHeader>
           <div className="space-y-4">
+            {allocationsQuery.isLoading && (
+              <div className="text-sm text-ink/70">Loading allocations...</div>
+            )}
             {licenses.length === 0 && (
               <div className="text-sm text-ink/70">No cycles available yet.</div>
             )}

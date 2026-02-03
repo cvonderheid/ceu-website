@@ -77,3 +77,66 @@ export type Certificate = {
   blob_path: string;
   created_at: string;
 };
+
+export type TimelineCertificate = {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+};
+
+export type TimelineCourse = {
+  id: string;
+  title: string;
+  provider: string | null;
+  completed_at: string;
+  hours: string;
+  has_certificate: boolean;
+  certificates: TimelineCertificate[];
+};
+
+export type TimelineCycle = {
+  id: string;
+  state_license_id: string;
+  state_code: string;
+  cycle_start: string;
+  cycle_end: string;
+  required_hours: string;
+  earned_hours: string;
+  remaining_hours: string;
+  percent: string;
+  days_remaining: number;
+  status: "overdue" | "complete" | "at_risk" | "on_track";
+  warnings: ProgressWarning[];
+  courses: TimelineCourse[];
+};
+
+export type TimelineState = {
+  state_code: string;
+  license_number: string | null;
+  cycles: TimelineCycle[];
+};
+
+export type TimelineResponse = {
+  states: TimelineState[];
+};
+
+export type TimelineEvent = {
+  id: string;
+  kind:
+    | "course_completed"
+    | "certificate_uploaded"
+    | "cycle_started"
+    | "cycle_due_soon"
+    | "cycle_overdue"
+    | "cycle_completed";
+  occurred_at: string;
+  state_code?: string | null;
+  cycle_id?: string | null;
+  course_id?: string | null;
+  title: string;
+  subtitle?: string | null;
+  badges?: string[] | null;
+  meta?: Record<string, any> | null;
+};

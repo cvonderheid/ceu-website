@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
 
 from ce_api.deps import get_current_user
-from ce_api.routers import cycles_router, state_licenses_router
+from ce_api.routers import cycles_router, state_licenses_router, timeline_router
 from ce_api.routers.allocations import router as allocations_router
 from ce_api.routers.certificates import router as certificates_router
 from ce_api.routers.courses import router as courses_router
@@ -43,6 +43,7 @@ api_router.include_router(courses_router)
 api_router.include_router(allocations_router)
 api_router.include_router(progress_router)
 api_router.include_router(certificates_router)
+api_router.include_router(timeline_router)
 app.include_router(api_router)
 
 

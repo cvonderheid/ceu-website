@@ -1,9 +1,10 @@
-import { LayoutDashboard, Layers, Settings, SquareStack } from "lucide-react";
+import { FileText, LayoutDashboard, Layers, Settings, SquareStack } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/timeline", label: "Timeline", icon: Layers },
+  { to: "/licenses", label: "Licenses", icon: FileText },
   { to: "/courses", label: "Courses", icon: SquareStack },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

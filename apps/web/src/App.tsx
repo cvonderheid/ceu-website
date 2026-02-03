@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "@/components/AppShell";
 import Courses from "@/pages/Courses";
 import Dashboard from "@/pages/Dashboard";
+import Licenses from "@/pages/Licenses";
 import Settings from "@/pages/Settings";
 import Timeline from "@/pages/Timeline";
 
@@ -13,6 +14,7 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/timeline" element={<Timeline />} />
+        <Route path="/licenses" element={<Licenses />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

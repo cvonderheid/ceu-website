@@ -1,75 +1,944 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { addMonths, format, parseISO, subMonths } from "date-fns";
+import { AlertTriangle, CalendarClock, Dot, Scroll } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
-import { formatRange } from "@/lib/format";
+import { formatDate, formatHours, formatRange } from "@/lib/format";
+import type { TimelineCourse, TimelineCycle, TimelineEvent, TimelineResponse } from "@/lib/types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MIN_TIMELINE_DAYS = 120;
+const CANVAS_MIN_WIDTH = 620;
+
+const COURSE_EVENT_KINDS: TimelineEvent["kind"][] = [
+  "course_completed",
+  "certificate_uploaded",
+];
+const CYCLE_EVENT_KINDS: TimelineEvent["kind"][] = [
+  "cycle_started",
+  "cycle_due_soon",
+  "cycle_overdue",
+  "cycle_completed",
+];
+
+type EventCourseMeta = {
+  id: string;
+  title: string;
+  provider?: string | null;
+  completed_at: string;
+  hours: string;
+  has_certificate?: boolean;
+};
+
+type EventCertificateMeta = {
+  id: string;
+  filename: string;
+  created_at: string;
+};
+
+type EventAllocationMeta = {
+  cycle_id: string;
+  state_code: string;
+  cycle_start: string;
+  cycle_end: string;
+};
+
+type EventCycleMeta = {
+  id: string;
+  state_code: string;
+  cycle_start: string;
+  cycle_end: string;
+  required_hours: string;
+  earned_hours: string;
+  remaining_hours: string;
+  percent: string;
+  status: string;
+  days_remaining: number;
+};
+
+type EventMeta = {
+  course?: EventCourseMeta;
+  certificates?: EventCertificateMeta[];
+  allocations?: EventAllocationMeta[];
+  cycle?: EventCycleMeta;
+  courses?: EventCourseMeta[];
+  warnings?: Array<{ course_title?: string }>;
+};
+
+function statusVariant(status: TimelineCycle["status"]) {
+  switch (status) {
+    case "complete":
+      return "success";
+    case "overdue":
+      return "danger";
+    case "at_risk":
+      return "warning";
+    default:
+      return "secondary";
+  }
+}
+
+function statusLabel(status: TimelineCycle["status"]) {
+  switch (status) {
+    case "complete":
+      return "Complete";
+    case "overdue":
+      return "Overdue";
+    case "at_risk":
+      return "At risk";
+    default:
+      return "On track";
+  }
+}
+
+function badgeVariant(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("overdue")) {
+    return "danger";
+  }
+  if (normalized.includes("complete")) {
+    return "success";
+  }
+  if (normalized.includes("risk") || normalized.includes("due") || normalized.includes("warning")) {
+    return "warning";
+  }
+  return "secondary";
+}
+
+function getRangeBounds(range: string) {
+  const today = new Date();
+  if (range === "6m") {
+    return { from: subMonths(today, 6), to: addMonths(today, 1) };
+  }
+  if (range === "12m") {
+    return { from: subMonths(today, 12), to: addMonths(today, 2) };
+  }
+  if (range === "24m") {
+    return { from: subMonths(today, 24), to: addMonths(today, 3) };
+  }
+  return null;
+}
+
+function getTimelineRange(response: TimelineResponse | undefined, range: string) {
+  const fixed = getRangeBounds(range);
+  if (fixed) {
+    return fixed;
+  }
+
+  const today = new Date();
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+  response?.states.forEach((state) => {
+    state.cycles.forEach((cycle) => {
+      const start = parseISO(cycle.cycle_start);
+      const end = parseISO(cycle.cycle_end);
+      if (!minDate || start < minDate) {
+        minDate = start;
+      }
+      if (!maxDate || end > maxDate) {
+        maxDate = end;
+      }
+      cycle.courses.forEach((course) => {
+        const completed = parseISO(course.completed_at);
+        if (!minDate || completed < minDate) {
+          minDate = completed;
+        }
+        if (!maxDate || completed > maxDate) {
+          maxDate = completed;
+        }
+      });
+    });
+  });
+  const from = minDate ? subMonths(minDate, 1) : subMonths(today, 6);
+  const to = maxDate ? addMonths(maxDate, 1) : addMonths(today, 1);
+
+  return { from, to };
+}
+
+function getFetchParams(range: string) {
+  const bounds = getRangeBounds(range);
+  if (!bounds) {
+    return undefined;
+  }
+  return {
+    from: format(bounds.from, "yyyy-MM-dd"),
+    to: format(bounds.to, "yyyy-MM-dd"),
+  };
+}
+
+function buildMonthTicks(start: Date, end: Date) {
+  const ticks: Date[] = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const limit = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cursor <= limit) {
+    ticks.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return ticks;
+}
+
+function timelinePosition(date: Date, start: Date, totalDays: number) {
+  return ((date.getTime() - start.getTime()) / DAY_MS / totalDays) * 100;
+}
+
+function CourseDot({
+  course,
+  position,
+  onSelect,
+}: {
+  course: TimelineCourse;
+  position: number;
+  onSelect: (course: TimelineCourse) => void;
+}) {
+  return (
+    <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${position}%` }}>
+      <div className="hidden sm:block">
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>
+            <button
+              type="button"
+              className="h-4 w-4 rounded-full border border-ink bg-surface shadow-sm"
+              onClick={() => onSelect(course)}
+            >
+              <span className="sr-only">{course.title}</span>
+            </button>
+          </HoverCardTrigger>
+          <HoverCardContent className="w-60">
+            <div className="text-xs font-semibold">{course.title}</div>
+            <div className="text-[11px] text-ink/60">{formatDate(course.completed_at)}</div>
+            <div className="mt-1 text-[11px]">{formatHours(course.hours)} hours</div>
+            {course.has_certificate && (
+              <div className="mt-1 text-[11px] text-ink/60">Certificate on file</div>
+            )}
+          </HoverCardContent>
+        </HoverCard>
+      </div>
+      <div className="sm:hidden">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="h-5 w-5 rounded-full border border-ink bg-surface shadow-sm"
+              onClick={() => onSelect(course)}
+            >
+              <span className="sr-only">{course.title}</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56">
+            <div className="text-xs font-semibold">{course.title}</div>
+            <div className="text-[11px] text-ink/60">{formatDate(course.completed_at)}</div>
+            <div className="mt-1 text-[11px]">{formatHours(course.hours)} hours</div>
+            {course.has_certificate && (
+              <div className="mt-1 text-[11px] text-ink/60">Certificate on file</div>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
+  );
+}
 
 export default function Timeline() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["progress"],
-    queryFn: api.getProgress,
+  const [feedRange, setFeedRange] = useState("12m");
+  const [feedTab, setFeedTab] = useState("all");
+  const [feedState, setFeedState] = useState("all");
+  const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
+
+  const [desktopRange, setDesktopRange] = useState("12m");
+  const [desktopView, setDesktopView] = useState("full");
+  const [selectedCycle, setSelectedCycle] = useState<TimelineCycle | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<TimelineCourse | null>(null);
+
+  const desktopParams = useMemo(() => getFetchParams(desktopRange), [desktopRange]);
+  const { data: timelineData, isLoading: timelineLoading } = useQuery({
+    queryKey: ["timeline", desktopRange],
+    queryFn: () => api.getTimeline(desktopParams),
   });
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, typeof data>();
-    data?.forEach((row) => {
-      if (!map.has(row.state_code)) {
-        map.set(row.state_code, []);
+  const eventParams = useMemo(() => {
+    const base = getFetchParams(feedRange);
+    return {
+      from: base?.from,
+      to: base?.to,
+      state: feedState !== "all" ? feedState : undefined,
+    };
+  }, [feedRange, feedState]);
+
+  const { data: eventsData, isLoading: eventsLoading } = useQuery({
+    queryKey: ["timeline-events", feedRange, feedState],
+    queryFn: () => api.getTimelineEvents(eventParams),
+  });
+
+  const states = timelineData?.states ?? [];
+  const stateOptions = useMemo(
+    () => Array.from(new Set(states.map((state) => state.state_code))).sort(),
+    [states]
+  );
+
+  const filteredEvents = useMemo(() => {
+    const items = eventsData ?? [];
+    if (feedTab === "courses") {
+      return items.filter((event) => COURSE_EVENT_KINDS.includes(event.kind));
+    }
+    if (feedTab === "cycles") {
+      return items.filter((event) => CYCLE_EVENT_KINDS.includes(event.kind));
+    }
+    return items;
+  }, [eventsData, feedTab]);
+
+  const groupedEvents = useMemo(() => {
+    const sorted = [...filteredEvents].sort(
+      (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
+    );
+    const map = new Map<string, TimelineEvent[]>();
+    sorted.forEach((event) => {
+      const label = format(parseISO(event.occurred_at), "MMM yyyy");
+      if (!map.has(label)) {
+        map.set(label, []);
       }
-      map.get(row.state_code)?.push(row);
+      map.get(label)?.push(event);
     });
     return Array.from(map.entries());
-  }, [data]);
+  }, [filteredEvents]);
+
+  const { from, to } = useMemo(() => getTimelineRange(timelineData, desktopRange), [
+    timelineData,
+    desktopRange,
+  ]);
+  const totalDays = Math.max(Math.ceil((to.getTime() - from.getTime()) / DAY_MS), MIN_TIMELINE_DAYS);
+  const ticks = useMemo(() => buildMonthTicks(from, to), [from, to]);
+
+  const selectedMeta = selectedEvent?.meta as EventMeta | undefined;
+  const isCourseEvent = selectedEvent ? COURSE_EVENT_KINDS.includes(selectedEvent.kind) : false;
+  const isCycleEvent = selectedEvent ? CYCLE_EVENT_KINDS.includes(selectedEvent.kind) : false;
 
   return (
-    <div>
-      <PageHeader title="Timeline" subtitle="Grouped by state for quick scanning." />
+    <TooltipProvider>
+      <div className="sm:hidden">
+        <PageHeader title="Timeline" subtitle="Recent activity across your states." />
 
-      {isLoading && <div className="text-sm text-ink/70">Loading timeline...</div>}
-      {!isLoading && (!data || data.length === 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>No cycles yet</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-ink/70">Add a state license to build your timeline.</p>
-          </CardContent>
-        </Card>
-      )}
+        <div className="space-y-4">
+          <Tabs value={feedTab} onValueChange={setFeedTab}>
+            <TabsList className="w-full justify-between">
+              <TabsTrigger value="all" className="flex-1">
+                All
+              </TabsTrigger>
+              <TabsTrigger value="courses" className="flex-1">
+                Courses
+              </TabsTrigger>
+              <TabsTrigger value="cycles" className="flex-1">
+                Cycles
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-      <div className="space-y-6">
-        {grouped.map(([stateCode, rows]) => (
-          <div key={stateCode} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{stateCode}</Badge>
-              <span className="text-sm text-ink/70">{rows?.length ?? 0} cycles</span>
-            </div>
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-ink/60">States</div>
+            <ScrollArea className="w-full">
+              <ToggleGroup
+                type="single"
+                value={feedState}
+                onValueChange={(value) => value && setFeedState(value)}
+                className="flex w-max gap-2 pb-2"
+              >
+                <ToggleGroupItem value="all">All states</ToggleGroupItem>
+                {stateOptions.map((stateCode) => (
+                  <ToggleGroupItem key={stateCode} value={stateCode}>
+                    {stateCode}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </ScrollArea>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-ink/60">Range</div>
+            <ToggleGroup
+              type="single"
+              value={feedRange}
+              onValueChange={(value) => value && setFeedRange(value)}
+              className="flex gap-2"
+            >
+              <ToggleGroupItem value="6m">6m</ToggleGroupItem>
+              <ToggleGroupItem value="12m">12m</ToggleGroupItem>
+              <ToggleGroupItem value="all">All</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          {eventsLoading && (
             <div className="space-y-3">
-              {rows?.map((row) => (
-                <Card key={row.cycle_id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>{formatRange(row.cycle_start, row.cycle_end)}</CardTitle>
-                      <span className="text-xs text-ink/60">{row.status.replace("_", " ")}</span>
+              {[0, 1, 2].map((item) => (
+                <Skeleton key={item} className="h-20 w-full" />
+              ))}
+            </div>
+          )}
+
+          {!eventsLoading && groupedEvents.length === 0 && (
+            <Card>
+              <CardHeader>
+                <div className="text-sm font-semibold">No events yet</div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-ink/70">Complete a course or add a cycle to see activity.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!eventsLoading &&
+            groupedEvents.map(([label, events]) => (
+              <div key={label} className="space-y-3">
+                <div className="relative">
+                  <Separator />
+                  <span className="absolute -top-2 left-3 bg-surface px-2 text-xs text-ink/60">
+                    {label}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {events.map((event) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      className="w-full text-left"
+                      onClick={() => setSelectedEvent(event)}
+                    >
+                      <Card>
+                        <CardContent className="space-y-2 pt-4">
+                          <div className="flex items-center justify-between text-xs text-ink/60">
+                            <span>{format(parseISO(event.occurred_at), "MMM d")}</span>
+                            <span className="capitalize">{event.kind.replace(/_/g, " ")}</span>
+                          </div>
+                          <div className="text-sm font-semibold text-ink">{event.title}</div>
+                          {event.subtitle && <div className="text-xs text-ink/70">{event.subtitle}</div>}
+                          {event.badges && event.badges.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {event.badges.map((badge) => (
+                                <Badge key={`${event.id}-${badge}`} variant={badgeVariant(badge)}>
+                                  {badge}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      <div className="hidden sm:block">
+        <PageHeader
+          title="Timeline"
+          subtitle="Visualize cycles and course applications across states."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <ToggleGroup
+                type="single"
+                value={desktopRange}
+                onValueChange={(value) => value && setDesktopRange(value)}
+                className="flex flex-wrap gap-2"
+              >
+                <ToggleGroupItem value="6m">6m</ToggleGroupItem>
+                <ToggleGroupItem value="12m">12m</ToggleGroupItem>
+                <ToggleGroupItem value="24m">24m</ToggleGroupItem>
+                <ToggleGroupItem value="all">All</ToggleGroupItem>
+              </ToggleGroup>
+              <Tabs value={desktopView} onValueChange={setDesktopView} className="w-full sm:w-auto">
+                <TabsList>
+                  <TabsTrigger value="full">Cycles + Courses</TabsTrigger>
+                  <TabsTrigger value="cycles">Cycles only</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          }
+        />
+
+        <Tabs value={desktopView} onValueChange={setDesktopView}>
+          <TabsContent value="full" className="mt-0">
+            {timelineLoading && (
+              <div className="space-y-4">
+                {[0, 1].map((item) => (
+                  <Card key={item}>
+                    <CardHeader className="space-y-3">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-4 w-24" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-36 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {!timelineLoading && states.length === 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="text-sm font-semibold">No cycles yet</div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-ink/70">Add a license to build your timeline.</p>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="space-y-6">
+              {states.map((state) => (
+                <Card key={state.state_code}>
+                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">{state.state_code}</Badge>
+                      <span className="text-sm text-ink/60">{state.cycles.length} cycles</span>
+                      {state.license_number && (
+                        <Badge variant="default">#{state.license_number}</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-ink/60">
+                      <Scroll className="h-4 w-4" />
+                      Drag to scroll
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <Progress value={Math.round(Number(row.percent) * 100)} />
-                    <div className="flex items-center justify-between text-sm text-ink/80">
-                      <span>{row.earned_hours} / {row.required_hours} hours</span>
-                      <span>{row.days_remaining} days left</span>
-                    </div>
+                  <CardContent>
+                    <ScrollArea className="w-full">
+                      <div
+                        className="space-y-6 pb-4"
+                        style={{ minWidth: Math.max(CANVAS_MIN_WIDTH, totalDays * 4) }}
+                      >
+                        <div className="relative flex h-8 items-end border-b border-dashed border-stroke/60 text-xs text-ink/60">
+                          {ticks.map((tick) => {
+                            const left = timelinePosition(tick, from, totalDays);
+                            return (
+                              <div
+                                key={tick.toISOString()}
+                                className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
+                                style={{ left: `${left}%` }}
+                              >
+                                <div className="h-2 w-px bg-stroke/60" />
+                                <div className="mt-1 whitespace-nowrap">
+                                  {format(tick, "MMM yyyy")}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="space-y-4">
+                          {state.cycles.map((cycle) => {
+                            const start = parseISO(cycle.cycle_start);
+                            const end = parseISO(cycle.cycle_end);
+                            const left = timelinePosition(start, from, totalDays);
+                            const right = timelinePosition(end, from, totalDays);
+                            const width = Math.max(right - left, 3);
+                            const progress = Math.round(Number(cycle.percent) * 100);
+
+                            return (
+                              <div key={cycle.id} className="relative">
+                                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink/60">
+                                  <CalendarClock className="h-4 w-4" />
+                                  <span>{formatRange(cycle.cycle_start, cycle.cycle_end)}</span>
+                                  <Badge variant={statusVariant(cycle.status)}>
+                                    {statusLabel(cycle.status)}
+                                  </Badge>
+                                  {cycle.warnings.length > 0 && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="warning" className="flex items-center gap-1">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          {cycle.warnings.length} warning
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        Course applied to multiple cycles in this state.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+
+                                <div className="relative h-12">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedCycle(cycle)}
+                                    className="absolute top-1/2 flex h-8 -translate-y-1/2 items-center justify-between rounded-full border border-stroke/60 bg-mist/80 px-3 text-xs font-semibold text-ink shadow-sm"
+                                    style={{ left: `${left}%`, width: `${width}%` }}
+                                  >
+                                    <span className="truncate">
+                                      {formatHours(cycle.earned_hours)} / {formatHours(cycle.required_hours)} hrs
+                                    </span>
+                                    <Badge variant={statusVariant(cycle.status)}>
+                                      {progress}%
+                                    </Badge>
+                                    <Progress value={progress} className="absolute bottom-0 left-0 h-1 w-full" />
+                                  </button>
+
+                                  {desktopView === "full" &&
+                                    cycle.courses.map((course) => {
+                                      const completed = parseISO(course.completed_at);
+                                      const pos = timelinePosition(completed, from, totalDays);
+                                      return (
+                                        <CourseDot
+                                          key={course.id}
+                                          course={course}
+                                          position={pos}
+                                          onSelect={setSelectedCourse}
+                                        />
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </ScrollArea>
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </div>
-        ))}
+          </TabsContent>
+
+          <TabsContent value="cycles" className="mt-0">
+            <div className="space-y-6">
+              {states.map((state) => (
+                <Card key={state.state_code}>
+                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">{state.state_code}</Badge>
+                      <span className="text-sm text-ink/60">{state.cycles.length} cycles</span>
+                      {state.license_number && (
+                        <Badge variant="default">#{state.license_number}</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-ink/60">
+                      <Scroll className="h-4 w-4" />
+                      Drag to scroll
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="w-full">
+                      <div
+                        className="space-y-6 pb-4"
+                        style={{ minWidth: Math.max(CANVAS_MIN_WIDTH, totalDays * 4) }}
+                      >
+                        <div className="relative flex h-8 items-end border-b border-dashed border-stroke/60 text-xs text-ink/60">
+                          {ticks.map((tick) => {
+                            const left = timelinePosition(tick, from, totalDays);
+                            return (
+                              <div
+                                key={tick.toISOString()}
+                                className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
+                                style={{ left: `${left}%` }}
+                              >
+                                <div className="h-2 w-px bg-stroke/60" />
+                                <div className="mt-1 whitespace-nowrap">
+                                  {format(tick, "MMM yyyy")}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="space-y-4">
+                          {state.cycles.map((cycle) => {
+                            const start = parseISO(cycle.cycle_start);
+                            const end = parseISO(cycle.cycle_end);
+                            const left = timelinePosition(start, from, totalDays);
+                            const right = timelinePosition(end, from, totalDays);
+                            const width = Math.max(right - left, 3);
+                            const progress = Math.round(Number(cycle.percent) * 100);
+
+                            return (
+                              <div key={cycle.id} className="relative">
+                                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink/60">
+                                  <CalendarClock className="h-4 w-4" />
+                                  <span>{formatRange(cycle.cycle_start, cycle.cycle_end)}</span>
+                                  <Badge variant={statusVariant(cycle.status)}>
+                                    {statusLabel(cycle.status)}
+                                  </Badge>
+                                  {cycle.warnings.length > 0 && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="warning" className="flex items-center gap-1">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          {cycle.warnings.length} warning
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        Course applied to multiple cycles in this state.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+
+                                <div className="relative h-10">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedCycle(cycle)}
+                                    className="absolute top-1/2 flex h-8 -translate-y-1/2 items-center justify-between rounded-full border border-stroke/60 bg-mist/80 px-3 text-xs font-semibold text-ink shadow-sm"
+                                    style={{ left: `${left}%`, width: `${width}%` }}
+                                  >
+                                    <span className="truncate">
+                                      {formatHours(cycle.earned_hours)} / {formatHours(cycle.required_hours)} hrs
+                                    </span>
+                                    <Badge variant={statusVariant(cycle.status)}>
+                                      {progress}%
+                                    </Badge>
+                                    <Progress value={progress} className="absolute bottom-0 left-0 h-1 w-full" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
+
+      <Sheet open={Boolean(selectedEvent)} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        <SheetContent>
+          {selectedEvent && (
+            <div className="space-y-4">
+              <SheetHeader>
+                <SheetTitle>{selectedEvent.title}</SheetTitle>
+              </SheetHeader>
+
+              {isCourseEvent && (
+                <div className="space-y-4">
+                  <div className="space-y-2 text-sm text-ink/80">
+                    <div className="font-semibold">{selectedMeta?.course?.title}</div>
+                    {selectedMeta?.course?.provider && (
+                      <div className="text-xs text-ink/60">{selectedMeta.course.provider}</div>
+                    )}
+                    {selectedMeta?.course?.completed_at && (
+                      <div>{formatDate(selectedMeta.course.completed_at)}</div>
+                    )}
+                    {selectedMeta?.course?.hours && (
+                      <div>{formatHours(selectedMeta.course.hours)} hours</div>
+                    )}
+                    {selectedMeta?.course?.has_certificate && (
+                      <Badge variant="success" className="w-fit">
+                        Certificate on file
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-ink/60">Allocations</div>
+                    {selectedMeta?.allocations && selectedMeta.allocations.length > 0 ? (
+                      selectedMeta.allocations.map((allocation) => (
+                        <div key={allocation.cycle_id} className="text-xs text-ink/70">
+                          {allocation.state_code}: {formatRange(allocation.cycle_start, allocation.cycle_end)}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-ink/60">Not applied to any cycles.</div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-ink/60">Certificates</div>
+                    {selectedMeta?.certificates && selectedMeta.certificates.length > 0 ? (
+                      selectedMeta.certificates.map((cert) => (
+                        <a
+                          key={cert.id}
+                          href={`/api/certificates/${cert.id}/download`}
+                          className="flex items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-xs"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Dot className="h-4 w-4" />
+                            {cert.filename}
+                          </span>
+                          <span className="text-ink/60">{formatDate(cert.created_at)}</span>
+                        </a>
+                      ))
+                    ) : (
+                      <div className="text-xs text-ink/60">No certificates uploaded.</div>
+                    )}
+                  </div>
+
+                  <Button asChild variant="outline">
+                    <Link to="/courses">Edit in Courses</Link>
+                  </Button>
+                </div>
+              )}
+
+              {isCycleEvent && (
+                <div className="space-y-4">
+                  <div className="space-y-2 text-sm text-ink/80">
+                    {selectedMeta?.cycle && (
+                      <div>{formatRange(selectedMeta.cycle.cycle_start, selectedMeta.cycle.cycle_end)}</div>
+                    )}
+                    {selectedMeta?.cycle && (
+                      <div>
+                        {formatHours(selectedMeta.cycle.earned_hours)} / {formatHours(selectedMeta.cycle.required_hours)} hours
+                      </div>
+                    )}
+                    {selectedMeta?.cycle?.status && (
+                      <Badge variant={statusVariant(selectedMeta.cycle.status as TimelineCycle["status"])}>
+                        {selectedMeta.cycle.status.replace(/_/g, " ")}
+                      </Badge>
+                    )}
+                    {selectedMeta?.warnings && selectedMeta.warnings.length > 0 && (
+                      <div className="text-xs text-ink/60">
+                        <AlertTriangle className="mr-1 inline h-3 w-3" />
+                        {selectedMeta.warnings.length} warning(s)
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-ink/60">Applied courses</div>
+                    {selectedMeta?.courses && selectedMeta.courses.length > 0 ? (
+                      selectedMeta.courses.map((course) => (
+                        <div key={course.id} className="text-xs text-ink/70">
+                          {course.title} · {formatDate(course.completed_at)} · {formatHours(course.hours)} hrs
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-ink/60">No courses applied yet.</div>
+                    )}
+                  </div>
+
+                  <Button asChild variant="outline">
+                    <Link to="/licenses">Edit in Licenses</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={Boolean(selectedCycle)} onOpenChange={(open) => !open && setSelectedCycle(null)}>
+        <SheetContent>
+          {selectedCycle && (
+            <div className="space-y-4">
+              <SheetHeader>
+                <SheetTitle>{selectedCycle.state_code} Cycle</SheetTitle>
+              </SheetHeader>
+              <div className="space-y-2 text-sm text-ink/80">
+                <div>{formatRange(selectedCycle.cycle_start, selectedCycle.cycle_end)}</div>
+                <div>
+                  {formatHours(selectedCycle.earned_hours)} / {formatHours(selectedCycle.required_hours)} hours
+                </div>
+                <Badge variant={statusVariant(selectedCycle.status)}>
+                  {statusLabel(selectedCycle.status)}
+                </Badge>
+                {selectedCycle.warnings.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-ink/60">Warnings</div>
+                    {selectedCycle.warnings.map((warning) => (
+                      <div key={`${warning.course_id}-${warning.state_code}`} className="text-xs text-ink/70">
+                        <AlertTriangle className="mr-1 inline h-3 w-3" />
+                        {warning.course_title} appears in multiple cycles.
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-ink/60">Applied courses</div>
+                {selectedCycle.courses.length === 0 && (
+                  <div className="text-xs text-ink/60">No courses applied yet.</div>
+                )}
+                {selectedCycle.courses.map((course) => (
+                  <button
+                    key={course.id}
+                    type="button"
+                    onClick={() => setSelectedCourse(course)}
+                    className="flex w-full items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-left text-xs"
+                  >
+                    <span>
+                      <div className="font-semibold text-ink">{course.title}</div>
+                      <div className="text-ink/60">{formatDate(course.completed_at)}</div>
+                    </span>
+                    <span className="text-ink/60">{formatHours(course.hours)} hrs</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={Boolean(selectedCourse)} onOpenChange={(open) => !open && setSelectedCourse(null)}>
+        <SheetContent>
+          {selectedCourse && (
+            <div className="space-y-4">
+              <SheetHeader>
+                <SheetTitle>{selectedCourse.title}</SheetTitle>
+              </SheetHeader>
+              <div className="space-y-2 text-sm text-ink/80">
+                {selectedCourse.provider && (
+                  <div className="text-xs text-ink/60">{selectedCourse.provider}</div>
+                )}
+                <div>{formatDate(selectedCourse.completed_at)}</div>
+                <div>{formatHours(selectedCourse.hours)} hours</div>
+                {selectedCourse.has_certificate && (
+                  <Badge variant="success" className="w-fit">
+                    Certificate on file
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-ink/60">Certificates</div>
+                {selectedCourse.certificates.length === 0 && (
+                  <div className="text-xs text-ink/60">No certificates uploaded.</div>
+                )}
+                {selectedCourse.certificates.map((cert) => (
+                  <a
+                    key={cert.id}
+                    href={`/api/certificates/${cert.id}/download`}
+                    className="flex items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-xs"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Dot className="h-4 w-4" />
+                      {cert.filename}
+                    </span>
+                    <span className="text-ink/60">{formatDate(cert.created_at)}</span>
+                  </a>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-ink/60">Allocations</div>
+                {states
+                  .flatMap((state) => state.cycles)
+                  .filter((cycle) => cycle.courses.some((course) => course.id === selectedCourse.id))
+                  .map((cycle) => (
+                    <div key={cycle.id} className="text-xs text-ink/70">
+                      {cycle.state_code}: {formatRange(cycle.cycle_start, cycle.cycle_end)}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </TooltipProvider>
   );
 }

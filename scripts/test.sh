@@ -9,6 +9,7 @@ export DEV_EMAIL="${DEV_EMAIL:-dev@example.com}"
 
 echo "Starting Postgres..."
 docker compose up -d db
+./scripts/wait_for_db.sh
 
 echo "Running migrations..."
 (
