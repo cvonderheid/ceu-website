@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ce_api.db.session import get_db_session
 from ce_api.deps import get_current_user
-from ce_api.models import Certificate, CourseCredit, CreditAllocation, User
+from ce_api.models import Certificate, CourseCredit, CreditAllocation, LicenseCycle, StateLicense, User
 from ce_api.schemas import CertificateOut, CourseCreate, CourseOut, CourseUpdate
 from ce_api.storage import get_cert_storage_dir
 
@@ -59,6 +59,23 @@ def create_course(
         hours=payload.hours,
     )
     session.add(course)
+    session.flush()
+
+    cycle_ids = session.scalars(
+        select(LicenseCycle.id)
+        .join(StateLicense, LicenseCycle.state_license_id == StateLicense.id)
+        .where(
+            StateLicense.user_id == current_user.id,
+            LicenseCycle.cycle_start <= payload.completed_at,
+            LicenseCycle.cycle_end >= payload.completed_at,
+        )
+    ).all()
+
+    for cycle_id in cycle_ids:
+        session.add(
+            CreditAllocation(course_credit_id=course.id, license_cycle_id=cycle_id)
+        )
+
     session.commit()
     session.refresh(course)
     return CourseOut.model_validate(course)

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { addMonths, format, parseISO, subMonths } from "date-fns";
-import { AlertTriangle, CalendarClock, Dot, Scroll } from "lucide-react";
+import { AlertTriangle, Dot } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import PageHeader from "@/components/PageHeader";
@@ -15,16 +15,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { formatDate, formatHours, formatRange } from "@/lib/format";
-import type { TimelineCourse, TimelineCycle, TimelineEvent, TimelineResponse } from "@/lib/types";
+import type { TimelineCourse, TimelineCycle, TimelineEvent } from "@/lib/types";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const MIN_TIMELINE_DAYS = 120;
-const CANVAS_MIN_WIDTH = 620;
 
 const COURSE_EVENT_KINDS: TimelineEvent["kind"][] = [
   "course_completed",
@@ -135,42 +130,6 @@ function getRangeBounds(range: string) {
   return null;
 }
 
-function getTimelineRange(response: TimelineResponse | undefined, range: string) {
-  const fixed = getRangeBounds(range);
-  if (fixed) {
-    return fixed;
-  }
-
-  const today = new Date();
-  let minDate: Date | null = null;
-  let maxDate: Date | null = null;
-  response?.states.forEach((state) => {
-    state.cycles.forEach((cycle) => {
-      const start = parseISO(cycle.cycle_start);
-      const end = parseISO(cycle.cycle_end);
-      if (!minDate || start < minDate) {
-        minDate = start;
-      }
-      if (!maxDate || end > maxDate) {
-        maxDate = end;
-      }
-      cycle.courses.forEach((course) => {
-        const completed = parseISO(course.completed_at);
-        if (!minDate || completed < minDate) {
-          minDate = completed;
-        }
-        if (!maxDate || completed > maxDate) {
-          maxDate = completed;
-        }
-      });
-    });
-  });
-  const from = minDate ? subMonths(minDate, 1) : subMonths(today, 6);
-  const to = maxDate ? addMonths(maxDate, 1) : addMonths(today, 1);
-
-  return { from, to };
-}
-
 function getFetchParams(range: string) {
   const bounds = getRangeBounds(range);
   if (!bounds) {
@@ -180,78 +139,6 @@ function getFetchParams(range: string) {
     from: format(bounds.from, "yyyy-MM-dd"),
     to: format(bounds.to, "yyyy-MM-dd"),
   };
-}
-
-function buildMonthTicks(start: Date, end: Date) {
-  const ticks: Date[] = [];
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-  const limit = new Date(end.getFullYear(), end.getMonth(), 1);
-  while (cursor <= limit) {
-    ticks.push(new Date(cursor));
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return ticks;
-}
-
-function timelinePosition(date: Date, start: Date, totalDays: number) {
-  return ((date.getTime() - start.getTime()) / DAY_MS / totalDays) * 100;
-}
-
-function CourseDot({
-  course,
-  position,
-  onSelect,
-}: {
-  course: TimelineCourse;
-  position: number;
-  onSelect: (course: TimelineCourse) => void;
-}) {
-  return (
-    <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `${position}%` }}>
-      <div className="hidden sm:block">
-        <HoverCard openDelay={200}>
-          <HoverCardTrigger asChild>
-            <button
-              type="button"
-              className="h-4 w-4 rounded-full border border-ink bg-surface shadow-sm"
-              onClick={() => onSelect(course)}
-            >
-              <span className="sr-only">{course.title}</span>
-            </button>
-          </HoverCardTrigger>
-          <HoverCardContent className="w-60">
-            <div className="text-xs font-semibold">{course.title}</div>
-            <div className="text-[11px] text-ink/60">{formatDate(course.completed_at)}</div>
-            <div className="mt-1 text-[11px]">{formatHours(course.hours)} hours</div>
-            {course.has_certificate && (
-              <div className="mt-1 text-[11px] text-ink/60">Certificate on file</div>
-            )}
-          </HoverCardContent>
-        </HoverCard>
-      </div>
-      <div className="sm:hidden">
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="h-5 w-5 rounded-full border border-ink bg-surface shadow-sm"
-              onClick={() => onSelect(course)}
-            >
-              <span className="sr-only">{course.title}</span>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56">
-            <div className="text-xs font-semibold">{course.title}</div>
-            <div className="text-[11px] text-ink/60">{formatDate(course.completed_at)}</div>
-            <div className="mt-1 text-[11px]">{formatHours(course.hours)} hours</div>
-            {course.has_certificate && (
-              <div className="mt-1 text-[11px] text-ink/60">Certificate on file</div>
-            )}
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
-  );
 }
 
 export default function Timeline() {
@@ -317,16 +204,124 @@ export default function Timeline() {
     return Array.from(map.entries());
   }, [filteredEvents]);
 
-  const { from, to } = useMemo(() => getTimelineRange(timelineData, desktopRange), [
-    timelineData,
-    desktopRange,
-  ]);
-  const totalDays = Math.max(Math.ceil((to.getTime() - from.getTime()) / DAY_MS), MIN_TIMELINE_DAYS);
-  const ticks = useMemo(() => buildMonthTicks(from, to), [from, to]);
-
   const selectedMeta = selectedEvent?.meta as EventMeta | undefined;
   const isCourseEvent = selectedEvent ? COURSE_EVENT_KINDS.includes(selectedEvent.kind) : false;
   const isCycleEvent = selectedEvent ? CYCLE_EVENT_KINDS.includes(selectedEvent.kind) : false;
+
+  const renderDesktopStates = (showCourses: boolean) => (
+    <>
+      {timelineLoading && (
+        <div className="space-y-4">
+          {[0, 1].map((item) => (
+            <Card key={item}>
+              <CardHeader className="space-y-3">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-32 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!timelineLoading && states.length === 0 && (
+        <Card>
+          <CardHeader>
+            <div className="text-sm font-semibold">No cycles yet</div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-ink/70">Add a license to build your timeline.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!timelineLoading && states.length > 0 && (
+        <div className="space-y-6">
+          {states.map((state) => (
+            <Card key={state.state_code}>
+              <CardHeader className="flex flex-wrap items-center gap-3">
+                <Badge variant="secondary">{state.state_code}</Badge>
+                <span className="text-sm text-ink/60">{state.cycles.length} cycles</span>
+                {state.license_number && <Badge variant="default">#{state.license_number}</Badge>}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {state.cycles.map((cycle) => {
+                  const progress = Math.round(Number(cycle.percent) * 100);
+                  return (
+                    <div
+                      key={cycle.id}
+                      className="space-y-3 rounded-xl border border-stroke/60 bg-surface/80 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {formatRange(cycle.cycle_start, cycle.cycle_end)}
+                          </div>
+                          <div className="text-xs text-ink/60">
+                            {cycle.days_remaining} days remaining
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={statusVariant(cycle.status)}>
+                            {statusLabel(cycle.status)}
+                          </Badge>
+                          {cycle.warnings.length > 0 && (
+                            <Badge variant="warning" className="flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              {cycle.warnings.length} warning
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <Progress value={progress} />
+                      <div className="flex flex-wrap items-center justify-between text-xs text-ink/60">
+                        <span>
+                          {formatHours(cycle.earned_hours)} / {formatHours(cycle.required_hours)} hrs
+                        </span>
+                        <span>{formatHours(cycle.remaining_hours)} remaining</span>
+                      </div>
+
+                      {showCourses && (
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-ink/60">Applied courses</div>
+                          {cycle.courses.length === 0 && (
+                            <div className="text-xs text-ink/60">No courses applied yet.</div>
+                          )}
+                          {cycle.courses.map((course) => (
+                            <button
+                              key={course.id}
+                              type="button"
+                              onClick={() => setSelectedCourse(course)}
+                              className="flex w-full items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-left text-xs"
+                            >
+                              <span>
+                                <div className="font-semibold text-ink">{course.title}</div>
+                                <div className="text-ink/60">{formatDate(course.completed_at)}</div>
+                              </span>
+                              <span className="text-ink/60">{formatHours(course.hours)} hrs</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="outline" onClick={() => setSelectedCycle(cycle)}>
+                          Details
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <TooltipProvider>
@@ -449,7 +444,7 @@ export default function Timeline() {
       <div className="hidden sm:block">
         <PageHeader
           title="Timeline"
-          subtitle="Visualize cycles and course applications across states."
+          subtitle="Condensed view of cycles and applied courses."
           actions={
             <div className="flex flex-wrap gap-2">
               <ToggleGroup
@@ -475,246 +470,10 @@ export default function Timeline() {
 
         <Tabs value={desktopView} onValueChange={setDesktopView}>
           <TabsContent value="full" className="mt-0">
-            {timelineLoading && (
-              <div className="space-y-4">
-                {[0, 1].map((item) => (
-                  <Card key={item}>
-                    <CardHeader className="space-y-3">
-                      <Skeleton className="h-5 w-32" />
-                      <Skeleton className="h-4 w-24" />
-                    </CardHeader>
-                    <CardContent>
-                      <Skeleton className="h-36 w-full" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {!timelineLoading && states.length === 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="text-sm font-semibold">No cycles yet</div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-ink/70">Add a license to build your timeline.</p>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="space-y-6">
-              {states.map((state) => (
-                <Card key={state.state_code}>
-                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{state.state_code}</Badge>
-                      <span className="text-sm text-ink/60">{state.cycles.length} cycles</span>
-                      {state.license_number && (
-                        <Badge variant="default">#{state.license_number}</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-ink/60">
-                      <Scroll className="h-4 w-4" />
-                      Drag to scroll
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="w-full">
-                      <div
-                        className="space-y-6 pb-4"
-                        style={{ minWidth: Math.max(CANVAS_MIN_WIDTH, totalDays * 4) }}
-                      >
-                        <div className="relative flex h-8 items-end border-b border-dashed border-stroke/60 text-xs text-ink/60">
-                          {ticks.map((tick) => {
-                            const left = timelinePosition(tick, from, totalDays);
-                            return (
-                              <div
-                                key={tick.toISOString()}
-                                className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-                                style={{ left: `${left}%` }}
-                              >
-                                <div className="h-2 w-px bg-stroke/60" />
-                                <div className="mt-1 whitespace-nowrap">
-                                  {format(tick, "MMM yyyy")}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="space-y-4">
-                          {state.cycles.map((cycle) => {
-                            const start = parseISO(cycle.cycle_start);
-                            const end = parseISO(cycle.cycle_end);
-                            const left = timelinePosition(start, from, totalDays);
-                            const right = timelinePosition(end, from, totalDays);
-                            const width = Math.max(right - left, 3);
-                            const progress = Math.round(Number(cycle.percent) * 100);
-
-                            return (
-                              <div key={cycle.id} className="relative">
-                                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink/60">
-                                  <CalendarClock className="h-4 w-4" />
-                                  <span>{formatRange(cycle.cycle_start, cycle.cycle_end)}</span>
-                                  <Badge variant={statusVariant(cycle.status)}>
-                                    {statusLabel(cycle.status)}
-                                  </Badge>
-                                  {cycle.warnings.length > 0 && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Badge variant="warning" className="flex items-center gap-1">
-                                          <AlertTriangle className="h-3 w-3" />
-                                          {cycle.warnings.length} warning
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        Course applied to multiple cycles in this state.
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-
-                                <div className="relative h-12">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedCycle(cycle)}
-                                    className="absolute top-1/2 flex h-8 -translate-y-1/2 items-center justify-between rounded-full border border-stroke/60 bg-mist/80 px-3 text-xs font-semibold text-ink shadow-sm"
-                                    style={{ left: `${left}%`, width: `${width}%` }}
-                                  >
-                                    <span className="truncate">
-                                      {formatHours(cycle.earned_hours)} / {formatHours(cycle.required_hours)} hrs
-                                    </span>
-                                    <Badge variant={statusVariant(cycle.status)}>
-                                      {progress}%
-                                    </Badge>
-                                    <Progress value={progress} className="absolute bottom-0 left-0 h-1 w-full" />
-                                  </button>
-
-                                  {desktopView === "full" &&
-                                    cycle.courses.map((course) => {
-                                      const completed = parseISO(course.completed_at);
-                                      const pos = timelinePosition(completed, from, totalDays);
-                                      return (
-                                        <CourseDot
-                                          key={course.id}
-                                          course={course}
-                                          position={pos}
-                                          onSelect={setSelectedCourse}
-                                        />
-                                      );
-                                    })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {renderDesktopStates(true)}
           </TabsContent>
-
           <TabsContent value="cycles" className="mt-0">
-            <div className="space-y-6">
-              {states.map((state) => (
-                <Card key={state.state_code}>
-                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{state.state_code}</Badge>
-                      <span className="text-sm text-ink/60">{state.cycles.length} cycles</span>
-                      {state.license_number && (
-                        <Badge variant="default">#{state.license_number}</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-ink/60">
-                      <Scroll className="h-4 w-4" />
-                      Drag to scroll
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="w-full">
-                      <div
-                        className="space-y-6 pb-4"
-                        style={{ minWidth: Math.max(CANVAS_MIN_WIDTH, totalDays * 4) }}
-                      >
-                        <div className="relative flex h-8 items-end border-b border-dashed border-stroke/60 text-xs text-ink/60">
-                          {ticks.map((tick) => {
-                            const left = timelinePosition(tick, from, totalDays);
-                            return (
-                              <div
-                                key={tick.toISOString()}
-                                className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-                                style={{ left: `${left}%` }}
-                              >
-                                <div className="h-2 w-px bg-stroke/60" />
-                                <div className="mt-1 whitespace-nowrap">
-                                  {format(tick, "MMM yyyy")}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="space-y-4">
-                          {state.cycles.map((cycle) => {
-                            const start = parseISO(cycle.cycle_start);
-                            const end = parseISO(cycle.cycle_end);
-                            const left = timelinePosition(start, from, totalDays);
-                            const right = timelinePosition(end, from, totalDays);
-                            const width = Math.max(right - left, 3);
-                            const progress = Math.round(Number(cycle.percent) * 100);
-
-                            return (
-                              <div key={cycle.id} className="relative">
-                                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink/60">
-                                  <CalendarClock className="h-4 w-4" />
-                                  <span>{formatRange(cycle.cycle_start, cycle.cycle_end)}</span>
-                                  <Badge variant={statusVariant(cycle.status)}>
-                                    {statusLabel(cycle.status)}
-                                  </Badge>
-                                  {cycle.warnings.length > 0 && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Badge variant="warning" className="flex items-center gap-1">
-                                          <AlertTriangle className="h-3 w-3" />
-                                          {cycle.warnings.length} warning
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        Course applied to multiple cycles in this state.
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-
-                                <div className="relative h-10">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedCycle(cycle)}
-                                    className="absolute top-1/2 flex h-8 -translate-y-1/2 items-center justify-between rounded-full border border-stroke/60 bg-mist/80 px-3 text-xs font-semibold text-ink shadow-sm"
-                                    style={{ left: `${left}%`, width: `${width}%` }}
-                                  >
-                                    <span className="truncate">
-                                      {formatHours(cycle.earned_hours)} / {formatHours(cycle.required_hours)} hrs
-                                    </span>
-                                    <Badge variant={statusVariant(cycle.status)}>
-                                      {progress}%
-                                    </Badge>
-                                    <Progress value={progress} className="absolute bottom-0 left-0 h-1 w-full" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {renderDesktopStates(false)}
           </TabsContent>
         </Tabs>
       </div>
