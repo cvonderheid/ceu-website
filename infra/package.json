@@ -1,0 +1,19 @@
+{
+  "name": "ceuplanner-infra",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "preview": "pulumi preview",
+    "up": "pulumi up"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^7.17.0",
+    "@pulumi/pulumi": "^3.219.0",
+    "@pulumi/random": "^4.19.1"
+  }
+}

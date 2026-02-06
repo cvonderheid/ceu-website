@@ -1,0 +1,6 @@
+name: ceuplanner-infra
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: AWS infrastructure for CEU Planner (prod)
