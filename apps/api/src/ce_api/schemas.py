@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UserMe(BaseModel):
@@ -21,6 +21,14 @@ class StateLicenseBase(BaseModel):
 
     state_code: str = Field(min_length=2, max_length=2)
     license_number: Optional[str] = None
+
+    @field_validator("state_code")
+    @classmethod
+    def normalize_state_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if len(normalized) != 2 or not normalized.isalpha():
+            raise ValueError("state_code must be exactly two letters")
+        return normalized
 
 
 class StateLicenseCreate(StateLicenseBase):

@@ -15,7 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import type { LicenseCycle, StateLicense } from "@/lib/types";
 
 const emptyLicenseForm = { state_code: "", license_number: "" };
@@ -56,15 +56,22 @@ export default function Licenses() {
     return map;
   }, [cycles]);
 
+  const invalidateProgressViews = () => {
+    queryClient.invalidateQueries({ queryKey: ["progress"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline-events"] });
+  };
+
   const createLicense = useMutation({
     mutationFn: api.createStateLicense,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["state-licenses"] });
+      invalidateProgressViews();
       toast.success("State license created");
       setLicenseSheetOpen(false);
       setLicenseForm(emptyLicenseForm);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to create license"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to create license")),
   });
 
   const updateLicense = useMutation({
@@ -72,11 +79,12 @@ export default function Licenses() {
       api.updateStateLicense(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["state-licenses"] });
+      invalidateProgressViews();
       toast.success("State license updated");
       setEditLicense(null);
       setLicenseSheetOpen(false);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to update license"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update license")),
   });
 
   const deleteLicense = useMutation({
@@ -84,40 +92,54 @@ export default function Licenses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["state-licenses"] });
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
+      invalidateProgressViews();
       toast.success("State license removed");
     },
-    onError: (error: any) => toast.error(error?.details || "Cannot delete license"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Cannot delete license")),
   });
 
   const createCycle = useMutation({
     mutationFn: api.createCycle,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
+      invalidateProgressViews();
       toast.success("Cycle created");
       setCycleSheetOpen(false);
       setCycleForm(emptyCycleForm);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to create cycle"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to create cycle")),
   });
 
   const updateCycle = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => api.updateCycle(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: {
+        cycle_start?: string | null;
+        cycle_end?: string | null;
+        required_hours?: string | null;
+      };
+    }) => api.updateCycle(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
+      invalidateProgressViews();
       toast.success("Cycle updated");
       setEditCycle(null);
       setCycleSheetOpen(false);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to update cycle"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update cycle")),
   });
 
   const deleteCycle = useMutation({
     mutationFn: api.deleteCycle,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
+      invalidateProgressViews();
       toast.success("Cycle deleted");
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to delete cycle"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to delete cycle")),
   });
 
   const openCreateLicense = () => {

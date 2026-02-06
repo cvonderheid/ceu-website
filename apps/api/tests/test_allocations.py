@@ -51,8 +51,9 @@ def test_bulk_allocations_ignore_duplicates(client: TestClient) -> None:
     payload = {"course_id": course_id, "cycle_ids": [cycle1, cycle2]}
     first = client.post("/api/allocations/bulk", json=payload, headers=headers)
     assert first.status_code == 201
-    assert len(first.json()["created"]) == 2
-    assert first.json()["skipped_cycle_ids"] == []
+    # Course creation auto-allocates into matching cycles by completion date.
+    assert len(first.json()["created"]) == 1
+    assert set(first.json()["skipped_cycle_ids"]) == {cycle1}
 
     second = client.post("/api/allocations/bulk", json=payload, headers=headers)
     assert second.status_code == 201

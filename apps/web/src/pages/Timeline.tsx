@@ -15,9 +15,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
-import { formatDate, formatHours, formatRange } from "@/lib/format";
+import { formatDate, formatDaysRemaining, formatHours, formatRange } from "@/lib/format";
 import type { TimelineCourse, TimelineCycle, TimelineEvent } from "@/lib/types";
 
 
@@ -260,7 +260,7 @@ export default function Timeline() {
                             {formatRange(cycle.cycle_start, cycle.cycle_end)}
                           </div>
                           <div className="text-xs text-ink/60">
-                            {cycle.days_remaining} days remaining
+                            {formatDaysRemaining(cycle.days_remaining)}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">

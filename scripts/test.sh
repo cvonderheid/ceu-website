@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_DATABASE_URL="postgresql+psycopg://ce_user:ce_pass@localhost:5432/ce_tracker"
+DB_PORT="${DB_PORT:-5432}"
+DEFAULT_DATABASE_URL="postgresql+psycopg://ce_user:ce_pass@localhost:${DB_PORT}/ce_tracker"
 
 export DATABASE_URL="${DATABASE_URL:-$DEFAULT_DATABASE_URL}"
 export DEV_USER_ID="${DEV_USER_ID:-dev-user-1}"
 export DEV_EMAIL="${DEV_EMAIL:-dev@example.com}"
+export DB_PORT
 
 echo "Starting Postgres..."
 docker compose up -d db

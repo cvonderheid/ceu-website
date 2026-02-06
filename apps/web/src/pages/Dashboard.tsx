@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { api } from "@/lib/api";
-import { formatRange } from "@/lib/format";
+import { formatDaysRemaining, formatRange } from "@/lib/format";
 import type { ProgressRow } from "@/lib/types";
 
 const statusMap: Record<ProgressRow["status"], { label: string; variant: "default" | "success" | "warning" | "danger" }> = {
@@ -64,7 +64,7 @@ export default function Dashboard() {
                   <span>{row.earned_hours} / {row.required_hours} hours</span>
                   <span className="flex items-center gap-1">
                     <CalendarClock className="h-4 w-4" />
-                    {row.days_remaining} days left
+                    {formatDaysRemaining(row.days_remaining)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-ink/60">

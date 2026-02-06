@@ -27,6 +27,7 @@ make db-down
 ## Defaults
 
 - DATABASE_URL defaults to `postgresql+psycopg://ce_user:ce_pass@localhost:5432/ce_tracker`
+- DB_PORT defaults to `5432` (set `DB_PORT=55432` if `5432` is already in use)
 - DEV_USER_ID defaults to `dev-user-1`
 - DEV_EMAIL defaults to `dev@example.com`
 

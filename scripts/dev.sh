@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_DATABASE_URL="postgresql+psycopg://ce_user:ce_pass@localhost:5432/ce_tracker"
+DB_PORT="${DB_PORT:-5432}"
+DEFAULT_DATABASE_URL="postgresql+psycopg://ce_user:ce_pass@localhost:${DB_PORT}/ce_tracker"
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-5173}"
 
 export DATABASE_URL="${DATABASE_URL:-$DEFAULT_DATABASE_URL}"
 : "${DEV_USER_ID:=dev-user-1}"
 : "${DEV_EMAIL:=dev@example.com}"
-export DEV_USER_ID DEV_EMAIL
+export DEV_USER_ID DEV_EMAIL DB_PORT
 
 cleanup() {
   if [[ -n "${API_PID:-}" ]]; then
@@ -26,6 +27,7 @@ docker compose up -d db
 
 echo "DATABASE_URL=${DATABASE_URL}"
 echo "DEV_USER_ID=${DEV_USER_ID}"
+echo "DB_PORT=${DB_PORT}"
 echo "API_PORT=${API_PORT}"
 echo "WEB_PORT=${WEB_PORT}"
 

@@ -12,3 +12,13 @@ export function formatHours(value: string | number) {
   const numeric = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numeric) ? numeric.toFixed(2) : "0.00";
 }
+
+export function formatDaysRemaining(daysRemaining: number) {
+  if (daysRemaining < 0) {
+    return `${Math.abs(daysRemaining)} days overdue`;
+  }
+  if (daysRemaining === 0) {
+    return "Due today";
+  }
+  return `${daysRemaining} days remaining`;
+}

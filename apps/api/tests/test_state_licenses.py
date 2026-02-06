@@ -39,3 +39,31 @@ def test_state_license_unique_constraint_returns_409(client: TestClient) -> None
 
     second = client.post("/api/state-licenses", json=payload, headers=headers)
     assert second.status_code == 409
+
+
+def test_state_license_normalizes_to_uppercase(client: TestClient) -> None:
+    headers = {"X-MS-CLIENT-PRINCIPAL-ID": "user-1"}
+    create_resp = client.post(
+        "/api/state-licenses",
+        json={"state_code": "ny", "license_number": "lower"},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    assert create_resp.json()["state_code"] == "NY"
+
+    duplicate = client.post(
+        "/api/state-licenses",
+        json={"state_code": "NY", "license_number": "upper"},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+
+
+def test_state_license_rejects_non_alpha_state_code(client: TestClient) -> None:
+    headers = {"X-MS-CLIENT-PRINCIPAL-ID": "user-1"}
+    create_resp = client.post(
+        "/api/state-licenses",
+        json={"state_code": "1A", "license_number": "bad"},
+        headers=headers,
+    )
+    assert create_resp.status_code == 422

@@ -24,6 +24,13 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.details || fallback;
+  }
+  return fallback;
+}
+
 async function parseError(response: Response) {
   try {
     const data = await response.json();

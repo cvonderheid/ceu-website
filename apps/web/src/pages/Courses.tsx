@@ -17,7 +17,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { api } from "@/lib/api";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { Certificate, Course, LicenseCycle, StateLicense } from "@/lib/types";
 
@@ -70,26 +70,47 @@ export default function Courses() {
     return map;
   }, [cycles]);
 
+  const invalidateProgressViews = () => {
+    queryClient.invalidateQueries({ queryKey: ["progress"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline-events"] });
+  };
+
   const createCourse = useMutation({
     mutationFn: api.createCourse,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["allocations"] });
+      invalidateProgressViews();
       toast.success("Course created");
       setCourseSheetOpen(false);
       setCourseForm({ title: "", provider: "", completed_at: "", hours: "" });
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to create course"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to create course")),
   });
 
   const updateCourse = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => api.updateCourse(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: {
+        title?: string | null;
+        provider?: string | null;
+        completed_at?: string | null;
+        hours?: string | null;
+      };
+    }) => api.updateCourse(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["allocations"] });
+      invalidateProgressViews();
       toast.success("Course updated");
       setCourseSheetOpen(false);
       setEditCourse(null);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to update course"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to update course")),
   });
 
   const deleteCourse = useMutation({
@@ -97,15 +118,17 @@ export default function Courses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
       queryClient.invalidateQueries({ queryKey: ["allocations"] });
+      queryClient.invalidateQueries({ queryKey: ["certificates"] });
+      invalidateProgressViews();
       toast.success("Course deleted");
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to delete course"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to delete course")),
   });
 
   const bulkAllocate = useMutation({
     mutationFn: api.bulkAllocate,
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["progress"] });
+      invalidateProgressViews();
       queryClient.invalidateQueries({ queryKey: ["allocations", applyCourse?.id] });
       toast.success(
         `Applied to ${result.created.length} cycles. Skipped ${result.skipped_cycle_ids.length}.`
@@ -115,7 +138,7 @@ export default function Courses() {
       setApplyCourse(null);
       setDidInitSelections(false);
     },
-    onError: (error: any) => toast.error(error?.details || "Failed to apply course"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to apply course")),
   });
 
   const uploadCertificate = useMutation({
@@ -123,18 +146,20 @@ export default function Courses() {
       api.uploadCertificate(courseId, file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["certificates", certCourse?.id] });
+      invalidateProgressViews();
       toast.success("Certificate uploaded");
     },
-    onError: (error: any) => toast.error(error?.details || "Upload failed"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Upload failed")),
   });
 
   const deleteCertificate = useMutation({
     mutationFn: api.deleteCertificate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["certificates", certCourse?.id] });
+      invalidateProgressViews();
       toast.success("Certificate deleted");
     },
-    onError: (error: any) => toast.error(error?.details || "Delete failed"),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Delete failed")),
   });
 
   const openEditCourse = (course: Course) => {
