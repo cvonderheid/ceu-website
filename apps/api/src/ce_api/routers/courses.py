@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -14,7 +13,7 @@ from ce_api.db.session import get_db_session
 from ce_api.deps import get_current_user
 from ce_api.models import Certificate, CourseCredit, CreditAllocation, LicenseCycle, StateLicense, User
 from ce_api.schemas import CertificateOut, CourseCreate, CourseOut, CourseUpdate
-from ce_api.storage import get_cert_storage_dir
+from ce_api.storage import delete_certificate_blob, save_certificate_upload
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -25,22 +24,6 @@ def _validate_hours(hours: Decimal) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="hours must be greater than 0",
         )
-
-
-def _save_upload(file: UploadFile, storage_dir: Path) -> tuple[str, int]:
-    suffix = Path(file.filename or "").suffix
-    filename = f"{uuid.uuid4().hex}{suffix}"
-    destination = storage_dir / filename
-    size_bytes = 0
-    with destination.open("wb") as output:
-        while True:
-            chunk = file.file.read(1024 * 1024)
-            if not chunk:
-                break
-            size_bytes += len(chunk)
-            output.write(chunk)
-    file.file.close()
-    return str(destination), size_bytes
 
 
 @router.post("", response_model=CourseOut, status_code=status.HTTP_201_CREATED)
@@ -193,10 +176,7 @@ def delete_course(
     session.commit()
 
     for blob_path in certificate_paths:
-        try:
-            Path(blob_path).unlink(missing_ok=True)
-        except OSError:
-            pass
+        delete_certificate_blob(blob_path)
 
 
 @router.post("/{course_id}/certificates", response_model=CertificateOut, status_code=status.HTTP_201_CREATED)
@@ -204,7 +184,6 @@ def upload_certificate(
     course_id: uuid.UUID,
     file: UploadFile = File(...),
     session: Session = Depends(get_db_session),
-    storage_dir: Path = Depends(get_cert_storage_dir),
     current_user: User = Depends(get_current_user),
 ) -> CertificateOut:
     course = session.scalar(
@@ -216,7 +195,7 @@ def upload_certificate(
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    blob_path, size_bytes = _save_upload(file, storage_dir)
+    blob_path, size_bytes = save_certificate_upload(file)
 
     certificate = Certificate(
         course_credit_id=course.id,

@@ -6,7 +6,9 @@ This Pulumi project provisions a single `prod` AWS environment in `us-east-1`:
 - ACM certificates (site + Cognito custom auth domain)
 - CloudFront + S3 static site hosting (`ceuplanner.com` + `www` redirect)
 - Cognito User Pool + SPA client + custom domain (`auth.ceuplanner.com`)
+  - Default user onboarding is invite/admin-only (self-signup disabled)
 - VPC + isolated subnets
+- VPC endpoints for S3 (gateway) and Cognito IDP (interface), so App Runner can stay private without NAT
 - RDS PostgreSQL (`db.t4g.micro`, single-AZ)
 - Secrets Manager secret for `DATABASE_URL`
 - ECR repository for the API image
@@ -16,7 +18,10 @@ This Pulumi project provisions a single `prod` AWS environment in `us-east-1`:
 ## Prerequisites
 
 - AWS credentials with permissions for Route53, ACM, CloudFront, Cognito, RDS, IAM, VPC, S3, ECR, App Runner, and Secrets Manager.
-- Pulumi CLI installed and authenticated.
+- Pulumi CLI installed.
+- Pulumi state backend selected:
+  - Pulumi Cloud: `pulumi login`
+  - Local/file backend: `pulumi login file://$HOME/.pulumi` and set `PULUMI_CONFIG_PASSPHRASE`
 - Node.js 20+.
 
 ## Stack config
@@ -73,6 +78,10 @@ Build the web app and sync `apps/web/dist` to the `websiteBucketName` output, th
 ```bash
 cd apps/web
 npm ci
+export VITE_COGNITO_DOMAIN=auth.ceuplanner.com
+export VITE_COGNITO_CLIENT_ID=<cognitoUserPoolClientId output>
+export VITE_COGNITO_REDIRECT_URI=https://ceuplanner.com/auth/callback
+export VITE_COGNITO_LOGOUT_URI=https://ceuplanner.com
 npm run build
 
 aws s3 sync dist s3://<websiteBucketName> --delete

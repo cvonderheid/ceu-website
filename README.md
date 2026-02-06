@@ -33,6 +33,28 @@ make db-down
 
 Override any of these env vars as needed.
 
+## Deployment auth and storage env
+
+For AWS deployment with Cognito and S3-backed certificates, configure:
+
+- API runtime:
+  - `COGNITO_REGION`
+  - `COGNITO_USER_POOL_ID`
+  - `COGNITO_USER_POOL_CLIENT_ID`
+  - `CERT_STORAGE_BUCKET`
+  - optional `CERT_STORAGE_PREFIX`
+  - `DATABASE_URL`
+- Web build/runtime:
+  - `VITE_COGNITO_DOMAIN` (e.g. `auth.example.com`)
+  - `VITE_COGNITO_CLIENT_ID`
+  - optional `VITE_COGNITO_REDIRECT_URI` (defaults to `<origin>/auth/callback`)
+  - optional `VITE_COGNITO_LOGOUT_URI` (defaults to `<origin>`)
+  - optional `VITE_COGNITO_SCOPE` (defaults to `openid email profile`)
+
+Notes:
+- API enforces Cognito bearer tokens when Cognito env vars are set.
+- Without Cognito env vars, API keeps local/dev header-based auth behavior for tests and local dev.
+
 ## Demo data
 
 Seed the app with demo data (states, cycles, courses, allocations, certificates):

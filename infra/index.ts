@@ -27,6 +27,7 @@ if (!createHostedZone && !existingHostedZoneId) {
 
 const stackName = pulumi.getStack();
 const namePrefix = stackName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+const awsRegion = aws.config.region || "us-east-1";
 const usEast1 = new aws.Provider("usEast1", { region: "us-east-1" });
 
 const hostedZoneLookup =
@@ -95,6 +96,53 @@ const appRunnerConnectorSg = new aws.ec2.SecurityGroup("appRunnerConnectorSg", {
   ],
   tags: {
     Name: `${namePrefix}-ceuplanner-apprunner-connector-sg`,
+  },
+});
+
+const vpcEndpointSecurityGroup = new aws.ec2.SecurityGroup("vpcEndpointSecurityGroup", {
+  vpcId: vpc.id,
+  description: "HTTPS ingress from App Runner connector to interface endpoints",
+  ingress: [
+    {
+      fromPort: 443,
+      toPort: 443,
+      protocol: "tcp",
+      securityGroups: [appRunnerConnectorSg.id],
+      description: "HTTPS from App Runner connector",
+    },
+  ],
+  egress: [
+    {
+      fromPort: 0,
+      toPort: 0,
+      protocol: "-1",
+      cidrBlocks: ["0.0.0.0/0"],
+    },
+  ],
+  tags: {
+    Name: `${namePrefix}-ceuplanner-vpce-sg`,
+  },
+});
+
+new aws.ec2.VpcEndpoint("s3GatewayEndpoint", {
+  vpcId: vpc.id,
+  serviceName: `com.amazonaws.${awsRegion}.s3`,
+  vpcEndpointType: "Gateway",
+  routeTableIds: [privateRouteTable.id],
+  tags: {
+    Name: `${namePrefix}-ceuplanner-s3-vpce`,
+  },
+});
+
+new aws.ec2.VpcEndpoint("cognitoIdpEndpoint", {
+  vpcId: vpc.id,
+  serviceName: `com.amazonaws.${awsRegion}.cognito-idp`,
+  vpcEndpointType: "Interface",
+  privateDnsEnabled: true,
+  subnetIds: privateSubnets.map((subnet) => subnet.id),
+  securityGroupIds: [vpcEndpointSecurityGroup.id],
+  tags: {
+    Name: `${namePrefix}-ceuplanner-cognito-vpce`,
   },
 });
 
@@ -310,7 +358,7 @@ const userPool = new aws.cognito.UserPool("userPool", {
     temporaryPasswordValidityDays: 7,
   },
   adminCreateUserConfig: {
-    allowAdminCreateUserOnly: false,
+    allowAdminCreateUserOnly: true,
   },
 });
 
@@ -424,7 +472,7 @@ if (deployApiService) {
             CERT_STORAGE_BUCKET: certificateBucket.bucket,
             COGNITO_USER_POOL_ID: userPool.id,
             COGNITO_USER_POOL_CLIENT_ID: userPoolClient.id,
-            COGNITO_REGION: aws.config.region || "us-east-1",
+            COGNITO_REGION: awsRegion,
           },
         },
       },

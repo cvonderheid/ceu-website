@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ce_api.db.session import get_db_session
 from ce_api.deps import get_current_user
 from ce_api.models import Certificate, CourseCredit, User
+from ce_api.storage import delete_certificate_blob, load_certificate_bytes
 
 router = APIRouter(prefix="/certificates", tags=["certificates"])
 
@@ -40,14 +39,21 @@ def download_certificate(
     if not certificate:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    path = Path(certificate.blob_path)
-    if not path.exists():
+    try:
+        file_content = load_certificate_bytes(certificate.blob_path)
+    except FileNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="File storage unavailable",
+        ) from error
 
-    return FileResponse(
-        path,
+    safe_filename = certificate.filename.replace('"', "")
+    return Response(
+        content=file_content,
         media_type=certificate.content_type or "application/octet-stream",
-        filename=certificate.filename,
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 
 
@@ -65,7 +71,4 @@ def delete_certificate(
     session.delete(certificate)
     session.commit()
 
-    try:
-        Path(blob_path).unlink(missing_ok=True)
-    except OSError:
-        pass
+    delete_certificate_blob(blob_path)

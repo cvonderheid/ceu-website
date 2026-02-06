@@ -10,8 +10,10 @@ import type {
   TimelineResponse,
   UserMe,
 } from "@/lib/types";
+import { beginLogin, getValidAccessToken, isAuthConfigured, refreshAccessToken } from "@/lib/auth";
 
 const API_BASE = "";
+let loginRedirectStarted = false;
 
 export class ApiError extends Error {
   status: number;
@@ -44,19 +46,52 @@ async function parseError(response: Response) {
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const triggerLoginRedirect = () => {
+    if (!isAuthConfigured() || loginRedirectStarted) {
+      return;
+    }
+    loginRedirectStarted = true;
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    void beginLogin(returnTo).catch(() => {
+      loginRedirectStarted = false;
+    });
+  };
+
+  const makeRequest = async (token: string | null) => {
+    const headers = new Headers(options.headers || {});
+    if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    });
+  };
+
+  let token = await getValidAccessToken();
+  let response = await makeRequest(token);
+
+  if (response.status === 401 && isAuthConfigured()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      token = await getValidAccessToken();
+      response = await makeRequest(token);
+    } else {
+      triggerLoginRedirect();
+    }
+  }
 
   if (response.status === 204) {
     return undefined as T;
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      triggerLoginRedirect();
+    }
     const details = await parseError(response);
     throw new ApiError("Request failed", response.status, details);
   }
@@ -162,15 +197,10 @@ export const api = {
   uploadCertificate: async (courseId: string, file: File) => {
     const body = new FormData();
     body.append("file", file);
-    const response = await fetch(`/api/courses/${courseId}/certificates`, {
+    return apiFetch<Certificate>(`/api/courses/${courseId}/certificates`, {
       method: "POST",
       body,
     });
-    if (!response.ok) {
-      const details = await parseError(response);
-      throw new ApiError("Upload failed", response.status, details);
-    }
-    return (await response.json()) as Certificate;
   },
   deleteCertificate: (id: string) =>
     apiFetch<void>(`/api/certificates/${id}`, { method: "DELETE" }),

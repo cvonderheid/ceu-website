@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { logout } from "@/lib/auth";
 
 export default function Settings() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.getMe });
@@ -25,8 +26,15 @@ export default function Settings() {
             <div>
               <span className="font-semibold">External ID:</span> {me?.external_user_id}
             </div>
-            <Button asChild variant="outline" size="sm" className="mt-2">
-              <a href="/.auth/logout">Log out</a>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => {
+                logout();
+              }}
+            >
+              Log out
             </Button>
           </CardContent>
         </Card>
