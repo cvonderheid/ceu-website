@@ -16,6 +16,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { formatRange } from "@/lib/format";
 import type { LicenseCycle, StateLicense } from "@/lib/types";
 
 const emptyLicenseForm = { state_code: "", license_number: "" };
@@ -44,6 +45,8 @@ export default function Licenses() {
   const [cycleSheetOpen, setCycleSheetOpen] = useState(false);
   const [cycleForm, setCycleForm] = useState(emptyCycleForm);
   const [editCycle, setEditCycle] = useState<LicenseCycle | null>(null);
+  const [confirmLicenseDeleteId, setConfirmLicenseDeleteId] = useState<string | null>(null);
+  const [confirmCycleDeleteId, setConfirmCycleDeleteId] = useState<string | null>(null);
 
   const groupedCycles = useMemo(() => {
     const map = new Map<string, LicenseCycle[]>();
@@ -93,6 +96,7 @@ export default function Licenses() {
       queryClient.invalidateQueries({ queryKey: ["state-licenses"] });
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
       invalidateProgressViews();
+      setConfirmLicenseDeleteId(null);
       toast.success("State license removed");
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Cannot delete license")),
@@ -137,6 +141,7 @@ export default function Licenses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cycles"] });
       invalidateProgressViews();
+      setConfirmCycleDeleteId(null);
       toast.success("Cycle deleted");
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to delete cycle")),
@@ -145,6 +150,7 @@ export default function Licenses() {
   const openCreateLicense = () => {
     setEditLicense(null);
     setLicenseForm(emptyLicenseForm);
+    setConfirmLicenseDeleteId(null);
     setLicenseSheetOpen(true);
   };
 
@@ -171,24 +177,39 @@ export default function Licenses() {
     setCycleSheetOpen(true);
   };
 
-  const validateCycleForm = () => {
+  const normalizedStateCode = licenseForm.state_code.trim().toUpperCase();
+  const isLicenseFormValid = editLicense ? true : /^[A-Z]{2}$/.test(normalizedStateCode);
+  const licenseFormHint = editLicense
+    ? "Update the license number and save."
+    : isLicenseFormValid
+      ? "Ready to create."
+      : "Use a two-letter state code (e.g., NY).";
+
+  const cycleHours = Number(cycleForm.required_hours);
+  const cycleStart = cycleForm.cycle_start ? new Date(cycleForm.cycle_start) : null;
+  const cycleEnd = cycleForm.cycle_end ? new Date(cycleForm.cycle_end) : null;
+  const hasValidCycleDates = Boolean(
+    cycleStart &&
+      cycleEnd &&
+      !Number.isNaN(cycleStart.getTime()) &&
+      !Number.isNaN(cycleEnd.getTime()) &&
+      cycleEnd > cycleStart
+  );
+  const hasValidCycleHours = Number.isFinite(cycleHours) && cycleHours > 0;
+  const isCycleFormValid =
+    Boolean(cycleForm.state_license_id) && hasValidCycleDates && hasValidCycleHours;
+  const cycleFormHint = (() => {
     if (!cycleForm.cycle_start || !cycleForm.cycle_end) {
-      toast.error("Start and end dates are required");
-      return false;
+      return "Add both start and end dates.";
     }
-    const start = new Date(cycleForm.cycle_start);
-    const end = new Date(cycleForm.cycle_end);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-      toast.error("Cycle end must be after start date");
-      return false;
+    if (!hasValidCycleDates) {
+      return "End date must be after start date.";
     }
-    const hours = Number(cycleForm.required_hours);
-    if (!cycleForm.required_hours || Number.isNaN(hours) || hours <= 0) {
-      toast.error("Required hours must be greater than 0");
-      return false;
+    if (!hasValidCycleHours) {
+      return "Required hours must be greater than 0.";
     }
-    return true;
-  };
+    return "Ready to save.";
+  })();
 
   return (
     <div>
@@ -221,13 +242,35 @@ export default function Licenses() {
                   <Button size="sm" variant="outline" onClick={() => openEditLicense(license)}>
                     Edit
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => deleteLicense.mutate(license.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {confirmLicenseDeleteId === license.id ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmLicenseDeleteId(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={deleteLicense.isPending}
+                        onClick={() => deleteLicense.mutate(license.id)}
+                      >
+                        {deleteLicense.isPending ? "Deleting..." : "Delete state"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-ink/70"
+                      onClick={() => setConfirmLicenseDeleteId(license.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete state
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="mt-4 space-y-2">
@@ -246,17 +289,43 @@ export default function Licenses() {
                     >
                       <div>
                         <div className="font-semibold">
-                          {cycle.cycle_start} - {cycle.cycle_end}
+                          {formatRange(cycle.cycle_start, cycle.cycle_end)}
                         </div>
                         <div className="text-ink/60">Required: {cycle.required_hours} hours</div>
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => openEditCycle(cycle)}>
-                          Edit
+                          Edit cycle
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => deleteCycle.mutate(cycle.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {confirmCycleDeleteId === cycle.id ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmCycleDeleteId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              disabled={deleteCycle.isPending}
+                              onClick={() => deleteCycle.mutate(cycle.id)}
+                            >
+                              {deleteCycle.isPending ? "Deleting..." : "Delete cycle"}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-ink/70"
+                            onClick={() => setConfirmCycleDeleteId(cycle.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete cycle
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -314,9 +383,9 @@ export default function Licenses() {
               />
             </div>
             <Button
+              disabled={!isLicenseFormValid || createLicense.isPending || updateLicense.isPending}
               onClick={() => {
-                if (!licenseForm.state_code.trim()) {
-                  toast.error("State code is required");
+                if (!isLicenseFormValid) {
                   return;
                 }
                 if (editLicense) {
@@ -327,13 +396,20 @@ export default function Licenses() {
                   return;
                 }
                 createLicense.mutate({
-                  state_code: licenseForm.state_code,
+                  state_code: normalizedStateCode,
                   license_number: licenseForm.license_number || null,
                 });
               }}
             >
-              {editLicense ? "Save changes" : "Create license"}
+              {editLicense
+                ? updateLicense.isPending
+                  ? "Saving..."
+                  : "Save license"
+                : createLicense.isPending
+                  ? "Creating..."
+                  : "Create license"}
             </Button>
+            <p className="text-xs text-ink/60">{licenseFormHint}</p>
           </div>
         </SheetContent>
       </Sheet>
@@ -388,8 +464,9 @@ export default function Licenses() {
               />
             </div>
             <Button
+              disabled={!isCycleFormValid || createCycle.isPending || updateCycle.isPending}
               onClick={() => {
-                if (!validateCycleForm()) {
+                if (!isCycleFormValid) {
                   return;
                 }
                 const payload = {
@@ -412,8 +489,15 @@ export default function Licenses() {
                 createCycle.mutate(payload);
               }}
             >
-              {editCycle ? "Save cycle" : "Create cycle"}
+              {editCycle
+                ? updateCycle.isPending
+                  ? "Saving..."
+                  : "Save cycle"
+                : createCycle.isPending
+                  ? "Creating..."
+                  : "Create cycle"}
             </Button>
+            <p className="text-xs text-ink/60">{cycleFormHint}</p>
           </div>
         </SheetContent>
       </Sheet>

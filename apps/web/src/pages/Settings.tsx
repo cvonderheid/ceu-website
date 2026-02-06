@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import PageHeader from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 
@@ -24,9 +25,9 @@ export default function Settings() {
             <div>
               <span className="font-semibold">External ID:</span> {me?.external_user_id}
             </div>
-            <a className="text-accent hover:underline" href="/.auth/logout">
-              Log out
-            </a>
+            <Button asChild variant="outline" size="sm" className="mt-2">
+              <a href="/.auth/logout">Log out</a>
+            </Button>
           </CardContent>
         </Card>
 

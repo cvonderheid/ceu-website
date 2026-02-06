@@ -32,6 +32,15 @@ const CYCLE_EVENT_KINDS: TimelineEvent["kind"][] = [
   "cycle_completed",
 ];
 
+const EVENT_KIND_LABELS: Record<TimelineEvent["kind"], string> = {
+  course_completed: "Course completed",
+  certificate_uploaded: "Certificate uploaded",
+  cycle_started: "Cycle started",
+  cycle_due_soon: "Cycle due soon",
+  cycle_overdue: "Cycle overdue",
+  cycle_completed: "Cycle completed",
+};
+
 type EventCourseMeta = {
   id: string;
   title: string;
@@ -75,6 +84,22 @@ type EventMeta = {
   courses?: EventCourseMeta[];
   warnings?: Array<{ course_title?: string }>;
 };
+
+function eventKindLabel(kind: TimelineEvent["kind"]) {
+  return EVENT_KIND_LABELS[kind];
+}
+
+function eventSubtitle(event: TimelineEvent) {
+  const meta = event.meta as EventMeta | undefined;
+  if (
+    CYCLE_EVENT_KINDS.includes(event.kind) &&
+    meta?.cycle?.cycle_start &&
+    meta?.cycle?.cycle_end
+  ) {
+    return formatRange(meta.cycle.cycle_start, meta.cycle.cycle_end);
+  }
+  return event.subtitle ?? undefined;
+}
 
 function statusVariant(status: TimelineCycle["status"]) {
   switch (status) {
@@ -270,7 +295,7 @@ export default function Timeline() {
                           {cycle.warnings.length > 0 && (
                             <Badge variant="warning" className="flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3" />
-                              {cycle.warnings.length} warning
+                              {cycle.warnings.length} warning{cycle.warnings.length === 1 ? "" : "s"}
                             </Badge>
                           )}
                         </div>
@@ -326,9 +351,9 @@ export default function Timeline() {
   return (
     <TooltipProvider>
       <div className="sm:hidden">
-        <PageHeader title="Timeline" subtitle="Recent activity across your states." />
+        <PageHeader title="Timeline" subtitle="See course activity and deadline changes." />
 
-        <div className="space-y-4">
+        <div className="space-y-3 rounded-xl border border-stroke/60 bg-surface/80 p-3">
           <Tabs value={feedTab} onValueChange={setFeedTab}>
             <TabsList className="w-full justify-between">
               <TabsTrigger value="all" className="flex-1">
@@ -344,13 +369,13 @@ export default function Timeline() {
           </Tabs>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-ink/60">States</div>
-            <ScrollArea className="w-full">
+            <div className="text-xs font-semibold text-ink/60">State filter</div>
+            <ScrollArea className="w-full whitespace-nowrap">
               <ToggleGroup
                 type="single"
                 value={feedState}
                 onValueChange={(value) => value && setFeedState(value)}
-                className="flex w-max gap-2 pb-2"
+                className="flex w-max gap-2 pb-1"
               >
                 <ToggleGroupItem value="all">All states</ToggleGroupItem>
                 {stateOptions.map((stateCode) => (
@@ -363,7 +388,7 @@ export default function Timeline() {
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-ink/60">Range</div>
+            <div className="text-xs font-semibold text-ink/60">Time window</div>
             <ToggleGroup
               type="single"
               value={feedRange}
@@ -418,17 +443,22 @@ export default function Timeline() {
                         <CardContent className="space-y-2 pt-4">
                           <div className="flex items-center justify-between text-xs text-ink/60">
                             <span>{format(parseISO(event.occurred_at), "MMM d")}</span>
-                            <span className="capitalize">{event.kind.replace(/_/g, " ")}</span>
+                            <span>{eventKindLabel(event.kind)}</span>
                           </div>
                           <div className="text-sm font-semibold text-ink">{event.title}</div>
-                          {event.subtitle && <div className="text-xs text-ink/70">{event.subtitle}</div>}
+                          {eventSubtitle(event) && (
+                            <div className="text-xs text-ink/70">{eventSubtitle(event)}</div>
+                          )}
                           {event.badges && event.badges.length > 0 && (
                             <div className="flex flex-wrap gap-2">
-                              {event.badges.map((badge) => (
+                              {event.badges.slice(0, 2).map((badge) => (
                                 <Badge key={`${event.id}-${badge}`} variant={badgeVariant(badge)}>
                                   {badge}
                                 </Badge>
                               ))}
+                              {event.badges.length > 2 && (
+                                <Badge variant="secondary">+{event.badges.length - 2}</Badge>
+                              )}
                             </div>
                           )}
                         </CardContent>
@@ -444,7 +474,7 @@ export default function Timeline() {
       <div className="hidden sm:block">
         <PageHeader
           title="Timeline"
-          subtitle="Condensed view of cycles and applied courses."
+          subtitle="Monitor cycle progress and applied courses by state."
           actions={
             <div className="flex flex-wrap gap-2">
               <ToggleGroup
@@ -559,13 +589,13 @@ export default function Timeline() {
                     )}
                     {selectedMeta?.cycle?.status && (
                       <Badge variant={statusVariant(selectedMeta.cycle.status as TimelineCycle["status"])}>
-                        {selectedMeta.cycle.status.replace(/_/g, " ")}
+                        {statusLabel(selectedMeta.cycle.status as TimelineCycle["status"])}
                       </Badge>
                     )}
                     {selectedMeta?.warnings && selectedMeta.warnings.length > 0 && (
                       <div className="text-xs text-ink/60">
                         <AlertTriangle className="mr-1 inline h-3 w-3" />
-                        {selectedMeta.warnings.length} warning(s)
+                        {selectedMeta.warnings.length} warning{selectedMeta.warnings.length === 1 ? "" : "s"}
                       </div>
                     )}
                   </div>

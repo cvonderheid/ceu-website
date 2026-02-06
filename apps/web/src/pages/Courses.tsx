@@ -18,7 +18,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatRange } from "@/lib/format";
 import type { Certificate, Course, LicenseCycle, StateLicense } from "@/lib/types";
 
 export default function Courses() {
@@ -46,6 +46,8 @@ export default function Courses() {
 
   const [certSheetOpen, setCertSheetOpen] = useState(false);
   const [certCourse, setCertCourse] = useState<Course | null>(null);
+  const [confirmCourseDeleteId, setConfirmCourseDeleteId] = useState<string | null>(null);
+  const [confirmCertificateDeleteId, setConfirmCertificateDeleteId] = useState<string | null>(null);
 
   const certsQuery = useQuery({
     queryKey: ["certificates", certCourse?.id],
@@ -120,6 +122,7 @@ export default function Courses() {
       queryClient.invalidateQueries({ queryKey: ["allocations"] });
       queryClient.invalidateQueries({ queryKey: ["certificates"] });
       invalidateProgressViews();
+      setConfirmCourseDeleteId(null);
       toast.success("Course deleted");
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to delete course")),
@@ -157,6 +160,7 @@ export default function Courses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["certificates", certCourse?.id] });
       invalidateProgressViews();
+      setConfirmCertificateDeleteId(null);
       toast.success("Certificate deleted");
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Delete failed")),
@@ -182,8 +186,30 @@ export default function Courses() {
 
   const openCertSheet = (course: Course) => {
     setCertCourse(course);
+    setConfirmCertificateDeleteId(null);
     setCertSheetOpen(true);
   };
+
+  const courseHours = Number(courseForm.hours);
+  const isCourseFormValid = Boolean(
+    courseForm.title.trim() &&
+      courseForm.completed_at &&
+      Number.isFinite(courseHours) &&
+      courseHours > 0
+  );
+
+  const courseFormHint = (() => {
+    if (!courseForm.title.trim()) {
+      return "Add a clear course title.";
+    }
+    if (!courseForm.completed_at) {
+      return "Choose the completion date.";
+    }
+    if (!Number.isFinite(courseHours) || courseHours <= 0) {
+      return "Hours must be greater than 0.";
+    }
+    return "Ready to save.";
+  })();
 
   useEffect(() => {
     if (!applySheetOpen || !applyCourse || didInitSelections) {
@@ -255,7 +281,15 @@ export default function Courses() {
                   />
                 </div>
                 <Button
+                  disabled={
+                    !isCourseFormValid ||
+                    createCourse.isPending ||
+                    updateCourse.isPending
+                  }
                   onClick={() => {
+                    if (!isCourseFormValid) {
+                      return;
+                    }
                     if (editCourse) {
                       updateCourse.mutate({
                         id: editCourse.id,
@@ -276,8 +310,15 @@ export default function Courses() {
                     });
                   }}
                 >
-                  {editCourse ? "Save changes" : "Create course"}
+                  {editCourse
+                    ? updateCourse.isPending
+                      ? "Saving..."
+                      : "Save course"
+                    : createCourse.isPending
+                      ? "Creating..."
+                      : "Create course"}
                 </Button>
+                <p className="text-xs text-ink/60">{courseFormHint}</p>
               </div>
             </SheetContent>
           </Sheet>
@@ -310,22 +351,51 @@ export default function Courses() {
               </div>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => openEditCourse(course)}>
-                Edit
-              </Button>
-              <Button size="sm" variant="soft" onClick={() => openApplySheet(course)}>
+              <Button size="sm" onClick={() => openApplySheet(course)}>
                 <Link2 className="h-4 w-4" />
-                Apply to cycles
+                Apply hours
               </Button>
-              <Button size="sm" variant="soft" onClick={() => openCertSheet(course)}>
+              <Button size="sm" variant="outline" onClick={() => openCertSheet(course)}>
                 <FileUp className="h-4 w-4" />
                 Certificates
               </Button>
-            </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button size="sm" variant="ghost" onClick={() => deleteCourse.mutate(course.id)}>
-                <Trash2 className="h-4 w-4" />
+              <Button size="sm" variant="ghost" onClick={() => openEditCourse(course)}>
+                Edit details
               </Button>
+            </CardContent>
+            <CardFooter className="flex flex-wrap items-center justify-between gap-2 border-t border-stroke/50 pt-3">
+              {confirmCourseDeleteId === course.id ? (
+                <>
+                  <span className="text-xs text-ink/60">Delete this course and all certificates?</span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setConfirmCourseDeleteId(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={deleteCourse.isPending}
+                      onClick={() => deleteCourse.mutate(course.id)}
+                    >
+                      {deleteCourse.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-ink/70"
+                  onClick={() => setConfirmCourseDeleteId(course.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              )}
             </CardFooter>
           </Card>
         ))}
@@ -344,8 +414,11 @@ export default function Courses() {
       >
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Apply course to cycles</SheetTitle>
-            <SheetDescription>{applyCourse?.title}</SheetDescription>
+            <SheetTitle>Apply hours to cycles</SheetTitle>
+            <SheetDescription>
+              {applyCourse?.title}
+              {applyCourse ? " · Select cycles to add this course." : ""}
+            </SheetDescription>
           </SheetHeader>
           <div className="space-y-4">
             {allocationsQuery.isLoading && (
@@ -378,7 +451,7 @@ export default function Courses() {
                         />
                         <div className="flex-1">
                           <div className="font-semibold">
-                            {cycle.cycle_start} - {cycle.cycle_end}
+                            {formatRange(cycle.cycle_start, cycle.cycle_end)}
                           </div>
                           <div className="text-xs text-ink/60">Required {cycle.required_hours} hrs</div>
                         </div>
@@ -392,7 +465,11 @@ export default function Courses() {
                 </div>
               ))}
             </div>
+            <p className="text-xs text-ink/60">
+              Selecting a cycle adds this course. Unchecking does not remove existing allocations.
+            </p>
             <Button
+              disabled={!applyCourse || bulkAllocate.isPending}
               onClick={() => {
                 if (!applyCourse) {
                   return;
@@ -403,7 +480,7 @@ export default function Courses() {
                 });
               }}
             >
-              Apply
+              {bulkAllocate.isPending ? "Saving..." : "Save allocations"}
             </Button>
           </div>
         </SheetContent>
@@ -430,6 +507,9 @@ export default function Courses() {
                   event.currentTarget.value = "";
                 }}
               />
+              {uploadCertificate.isPending && (
+                <div className="text-xs text-ink/60">Uploading certificate...</div>
+              )}
             </div>
             {certsQuery.isLoading && <div className="text-sm text-ink/70">Loading files...</div>}
             {!certsQuery.isLoading && (certsQuery.data || []).length === 0 && (
@@ -454,9 +534,34 @@ export default function Courses() {
                     >
                       Download
                     </a>
-                    <Button size="sm" variant="ghost" onClick={() => deleteCertificate.mutate(cert.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {confirmCertificateDeleteId === cert.id ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setConfirmCertificateDeleteId(null)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          disabled={deleteCertificate.isPending}
+                          onClick={() => deleteCertificate.mutate(cert.id)}
+                        >
+                          {deleteCertificate.isPending ? "Deleting..." : "Delete"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-ink/70"
+                        onClick={() => setConfirmCertificateDeleteId(cert.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

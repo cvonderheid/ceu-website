@@ -12,7 +12,7 @@ const ToggleGroupItem = forwardRef<
   <ToggleGroupPrimitive.Item
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
       "border border-stroke/60 text-ink/70 transition data-[state=on]:border-ink data-[state=on]:bg-ink data-[state=on]:text-white",
       className
     )}

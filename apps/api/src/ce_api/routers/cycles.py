@@ -5,12 +5,12 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ce_api.db.session import get_db_session
 from ce_api.deps import get_current_user
-from ce_api.models import LicenseCycle, StateLicense, User
+from ce_api.models import CreditAllocation, LicenseCycle, StateLicense, User
 from ce_api.schemas import LicenseCycleCreate, LicenseCycleOut, LicenseCycleUpdate
 
 router = APIRouter(prefix="/cycles", tags=["cycles"])
@@ -168,5 +168,8 @@ def delete_cycle(
     if not cycle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
+    session.execute(
+        delete(CreditAllocation).where(CreditAllocation.license_cycle_id == cycle.id)
+    )
     session.delete(cycle)
     session.commit()

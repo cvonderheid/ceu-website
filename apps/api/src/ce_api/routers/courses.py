@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ce_api.db.session import get_db_session
@@ -178,27 +178,23 @@ def delete_course(
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    certificates = session.scalars(
-        select(Certificate).where(Certificate.course_credit_id == course.id)
-    ).all()
-    allocation_ids = session.scalars(
-        select(CreditAllocation.id).where(CreditAllocation.course_credit_id == course.id)
+    certificate_paths = session.scalars(
+        select(Certificate.blob_path).where(Certificate.course_credit_id == course.id)
     ).all()
 
-    for allocation_id in allocation_ids:
-        allocation = session.get(CreditAllocation, allocation_id)
-        if allocation:
-            session.delete(allocation)
-
-    for certificate in certificates:
-        session.delete(certificate)
+    session.execute(
+        delete(CreditAllocation).where(CreditAllocation.course_credit_id == course.id)
+    )
+    session.execute(
+        delete(Certificate).where(Certificate.course_credit_id == course.id)
+    )
 
     session.delete(course)
     session.commit()
 
-    for certificate in certificates:
+    for blob_path in certificate_paths:
         try:
-            Path(certificate.blob_path).unlink(missing_ok=True)
+            Path(blob_path).unlink(missing_ok=True)
         except OSError:
             pass
 

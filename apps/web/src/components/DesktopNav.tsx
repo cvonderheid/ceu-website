@@ -19,7 +19,7 @@ export default function DesktopNav() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              `flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
                 isActive ? "bg-ink text-white" : "text-ink/70 hover:bg-ink/5"
               }`
             }

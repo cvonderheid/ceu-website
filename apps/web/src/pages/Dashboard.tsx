@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CalendarClock } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { api } from "@/lib/api";
@@ -39,6 +41,9 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-ink/70">Create a state license and cycle to see progress.</p>
+            <Button asChild className="mt-3">
+              <Link to="/licenses">Add your first state</Link>
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -72,7 +77,7 @@ export default function Dashboard() {
                   {row.warnings.length > 0 && (
                     <span className="flex items-center gap-1 text-warning">
                       <AlertTriangle className="h-4 w-4" />
-                      Duplicate course use
+                      Course applied to multiple cycles
                     </span>
                   )}
                 </div>

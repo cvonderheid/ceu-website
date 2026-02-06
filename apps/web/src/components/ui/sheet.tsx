@@ -39,7 +39,10 @@ const SheetContent = React.forwardRef<
       {...props}
     >
       {children}
-      <SheetClose className="absolute right-4 top-4 rounded-full p-1 text-ink/60 hover:bg-ink/10">
+      <SheetClose
+        aria-label="Close panel"
+        className="absolute right-4 top-4 rounded-full p-1 text-ink/60 transition hover:bg-ink/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
         <X className="h-4 w-4" />
       </SheetClose>
     </DialogPrimitive.Content>

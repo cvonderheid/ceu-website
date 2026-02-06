@@ -18,7 +18,7 @@ export default function BottomNav() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              `flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
                 isActive ? "bg-ink text-white" : "text-ink/70"
               }`
             }
