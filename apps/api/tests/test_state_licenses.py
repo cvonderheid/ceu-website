@@ -1,4 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from ce_api.models import StateLicense, User
 
 
 def test_create_and_list_state_licenses(client: TestClient) -> None:
@@ -67,3 +72,20 @@ def test_state_license_rejects_non_alpha_state_code(client: TestClient) -> None:
         headers=headers,
     )
     assert create_resp.status_code == 422
+
+
+def test_state_license_db_check_rejects_lowercase(db_session: Session) -> None:
+    user = User(external_user_id="db-user-1")
+    db_session.add(user)
+    db_session.commit()
+
+    db_session.add(
+        StateLicense(
+            user_id=user.id,
+            state_code="ny",
+            license_number="LOWER",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
