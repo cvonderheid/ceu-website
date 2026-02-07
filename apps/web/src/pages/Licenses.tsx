@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import PageHeader from "@/components/PageHeader";
@@ -18,6 +18,7 @@ import {
 import { api, getApiErrorMessage } from "@/lib/api";
 import { formatRange } from "@/lib/format";
 import type { LicenseCycle, StateLicense } from "@/lib/types";
+import { US_STATE_CODES, US_STATES } from "@/lib/usStates";
 
 const emptyLicenseForm = { state_code: "", license_number: "" };
 const emptyCycleForm = {
@@ -26,6 +27,25 @@ const emptyCycleForm = {
   cycle_end: "",
   required_hours: "",
 };
+const CYCLE_HOUR_STEP = 0.25;
+
+function parseIsoDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
+function formatQuarterHours(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
 
 export default function Licenses() {
   const queryClient = useQueryClient();
@@ -58,6 +78,11 @@ export default function Licenses() {
     });
     return map;
   }, [cycles]);
+
+  const stateNameByCode = useMemo(
+    () => new Map(US_STATES.map((state) => [state.code, state.name])),
+    []
+  );
 
   const invalidateProgressViews = () => {
     queryClient.invalidateQueries({ queryKey: ["progress"] });
@@ -178,21 +203,19 @@ export default function Licenses() {
   };
 
   const normalizedStateCode = licenseForm.state_code.trim().toUpperCase();
-  const isLicenseFormValid = editLicense ? true : /^[A-Z]{2}$/.test(normalizedStateCode);
+  const isLicenseFormValid = editLicense ? true : US_STATE_CODES.has(normalizedStateCode);
   const licenseFormHint = editLicense
     ? "Update the license number and save."
     : isLicenseFormValid
       ? "Ready to create."
-      : "Use a two-letter state code (e.g., NY).";
+      : "Select a state.";
 
   const cycleHours = Number(cycleForm.required_hours);
-  const cycleStart = cycleForm.cycle_start ? new Date(cycleForm.cycle_start) : null;
-  const cycleEnd = cycleForm.cycle_end ? new Date(cycleForm.cycle_end) : null;
+  const cycleStart = cycleForm.cycle_start ? parseIsoDate(cycleForm.cycle_start) : null;
+  const cycleEnd = cycleForm.cycle_end ? parseIsoDate(cycleForm.cycle_end) : null;
   const hasValidCycleDates = Boolean(
     cycleStart &&
       cycleEnd &&
-      !Number.isNaN(cycleStart.getTime()) &&
-      !Number.isNaN(cycleEnd.getTime()) &&
       cycleEnd > cycleStart
   );
   const hasValidCycleHours = Number.isFinite(cycleHours) && cycleHours > 0;
@@ -202,6 +225,9 @@ export default function Licenses() {
     if (!cycleForm.cycle_start || !cycleForm.cycle_end) {
       return "Add both start and end dates.";
     }
+    if (!cycleStart || !cycleEnd) {
+      return "Use YYYY-MM-DD format.";
+    }
     if (!hasValidCycleDates) {
       return "End date must be after start date.";
     }
@@ -210,6 +236,15 @@ export default function Licenses() {
     }
     return "Ready to save.";
   })();
+
+  const adjustCycleHours = (delta: number) => {
+    setCycleForm((prev) => {
+      const currentHours = Number(prev.required_hours);
+      const current = Number.isFinite(currentHours) && currentHours > 0 ? currentHours : 0;
+      const next = Math.max(CYCLE_HOUR_STEP, Math.round((current + delta) * 4) / 4);
+      return { ...prev, required_hours: formatQuarterHours(next) };
+    });
+  };
 
   return (
     <div>
@@ -230,109 +265,124 @@ export default function Licenses() {
             <div className="text-sm text-ink/70">No licenses yet.</div>
           )}
           {licenses.map((license) => (
-            <div key={license.id} className="rounded-xl border border-stroke/60 bg-surface/80 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div key={license.id} className="space-y-3 rounded-xl border border-stroke/60 bg-surface/85 p-4">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold">{license.state_code}</div>
+                  <div className="text-lg font-semibold">
+                    {license.state_code}
+                    {stateNameByCode.get(license.state_code) && (
+                      <span className="ml-2 text-sm font-normal text-ink/60">
+                        {stateNameByCode.get(license.state_code)}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm text-ink/60">
-                    {license.license_number || "No license number"}
+                    License #: {license.license_number || "Not set"}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => openEditLicense(license)}>
-                    Edit
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => openEditLicense(license)}
+                    aria-label="Edit state license"
+                  >
+                    <Pencil className="h-4 w-4" />
                   </Button>
-                  {confirmLicenseDeleteId === license.id ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setConfirmLicenseDeleteId(null)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={deleteLicense.isPending}
-                        onClick={() => deleteLicense.mutate(license.id)}
-                      >
-                        {deleteLicense.isPending ? "Deleting..." : "Delete state"}
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-ink/70"
-                      onClick={() => setConfirmLicenseDeleteId(license.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete state
-                    </Button>
-                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-ink/70"
+                    onClick={() => setConfirmLicenseDeleteId(license.id)}
+                    aria-label="Delete state license"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">Cycles</span>
-                  <Button size="sm" variant="soft" onClick={() => openCreateCycle(license.id)}>
-                    <Plus className="h-4 w-4" />
-                    Add cycle
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {(groupedCycles.get(license.id) || []).map((cycle) => (
-                    <div
-                      key={cycle.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stroke/50 px-3 py-2 text-sm"
+
+              {confirmLicenseDeleteId === license.id && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-ink/80">
+                  <span>Delete this state and its cycles?</span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmLicenseDeleteId(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={deleteLicense.isPending}
+                      onClick={() => deleteLicense.mutate(license.id)}
                     >
-                      <div>
+                      {deleteLicense.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Cycles</span>
+                <Button size="sm" variant="soft" onClick={() => openCreateCycle(license.id)}>
+                  <Plus className="h-4 w-4" />
+                  Add cycle
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {(groupedCycles.get(license.id) || []).map((cycle) => (
+                  <div key={cycle.id} className="rounded-lg border border-stroke/50 bg-surface px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-sm">
                         <div className="font-semibold">
                           {formatRange(cycle.cycle_start, cycle.cycle_end)}
                         </div>
                         <div className="text-ink/60">Required: {cycle.required_hours} hours</div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openEditCycle(cycle)}>
-                          Edit cycle
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => openEditCycle(cycle)}
+                          aria-label="Edit cycle"
+                        >
+                          <Pencil className="h-4 w-4" />
                         </Button>
-                        {confirmCycleDeleteId === cycle.id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setConfirmCycleDeleteId(null)}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              disabled={deleteCycle.isPending}
-                              onClick={() => deleteCycle.mutate(cycle.id)}
-                            >
-                              {deleteCycle.isPending ? "Deleting..." : "Delete cycle"}
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-ink/70"
-                            onClick={() => setConfirmCycleDeleteId(cycle.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Delete cycle
-                          </Button>
-                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-ink/70"
+                          onClick={() => setConfirmCycleDeleteId(cycle.id)}
+                          aria-label="Delete cycle"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                  {(groupedCycles.get(license.id) || []).length === 0 && (
-                    <div className="text-sm text-ink/60">No cycles for this state yet.</div>
-                  )}
-                </div>
+                    {confirmCycleDeleteId === cycle.id && (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/10 px-2 py-2 text-xs text-ink/80">
+                        <span>Delete this cycle?</span>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => setConfirmCycleDeleteId(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={deleteCycle.isPending}
+                            onClick={() => deleteCycle.mutate(cycle.id)}
+                          >
+                            {deleteCycle.isPending ? "Deleting..." : "Delete"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(groupedCycles.get(license.id) || []).length === 0 && (
+                  <div className="rounded-lg border border-dashed border-stroke/70 bg-surface/70 px-3 py-3 text-sm text-ink/60">
+                    No cycles for this state yet.
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -348,7 +398,9 @@ export default function Licenses() {
           }
         }}
       >
-        <SheetContent>
+        <SheetContent
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <SheetHeader>
             <SheetTitle>{editLicense ? "Edit license" : "New state license"}</SheetTitle>
             <SheetDescription>Keep one license per state code.</SheetDescription>
@@ -356,7 +408,7 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="state_code">State code</Label>
-              <Input
+              <select
                 id="state_code"
                 value={licenseForm.state_code}
                 onChange={(event) =>
@@ -365,9 +417,16 @@ export default function Licenses() {
                     state_code: event.target.value.toUpperCase(),
                   }))
                 }
-                maxLength={2}
                 disabled={Boolean(editLicense)}
-              />
+                className="flex h-11 w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-base shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 sm:text-sm"
+              >
+                <option value="">Select a state...</option>
+                {US_STATES.map((state) => (
+                  <option key={state.code} value={state.code}>
+                    {state.code} - {state.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="license_number">License number</Label>
@@ -423,17 +482,23 @@ export default function Licenses() {
           }
         }}
       >
-        <SheetContent>
+        <SheetContent
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <SheetHeader>
             <SheetTitle>{editCycle ? "Edit cycle" : "New cycle"}</SheetTitle>
-            <SheetDescription>Cycle end date must be after start date.</SheetDescription>
+            <SheetDescription>
+              Enter dates in YYYY-MM-DD format. End date must be after start date.
+            </SheetDescription>
           </SheetHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cycle_start">Start date</Label>
               <Input
                 id="cycle_start"
-                type="date"
+                type="text"
+                inputMode="numeric"
+                placeholder="YYYY-MM-DD"
                 value={cycleForm.cycle_start}
                 onChange={(event) =>
                   setCycleForm((prev) => ({ ...prev, cycle_start: event.target.value }))
@@ -444,7 +509,9 @@ export default function Licenses() {
               <Label htmlFor="cycle_end">End date</Label>
               <Input
                 id="cycle_end"
-                type="date"
+                type="text"
+                inputMode="numeric"
+                placeholder="YYYY-MM-DD"
                 value={cycleForm.cycle_end}
                 onChange={(event) =>
                   setCycleForm((prev) => ({ ...prev, cycle_end: event.target.value }))
@@ -453,15 +520,38 @@ export default function Licenses() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="required_hours">Required hours</Label>
-              <Input
-                id="required_hours"
-                type="number"
-                step="0.25"
-                value={cycleForm.required_hours}
-                onChange={(event) =>
-                  setCycleForm((prev) => ({ ...prev, required_hours: event.target.value }))
-                }
-              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => adjustCycleHours(-CYCLE_HOUR_STEP)}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  id="required_hours"
+                  type="number"
+                  min={CYCLE_HOUR_STEP}
+                  step={CYCLE_HOUR_STEP}
+                  inputMode="decimal"
+                  value={cycleForm.required_hours}
+                  onChange={(event) =>
+                    setCycleForm((prev) => ({ ...prev, required_hours: event.target.value }))
+                  }
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => adjustCycleHours(CYCLE_HOUR_STEP)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-ink/60">
+                Use +/- or type a number (quarter-hour increments supported).
+              </p>
             </div>
             <Button
               disabled={!isCycleFormValid || createCycle.isPending || updateCycle.isPending}

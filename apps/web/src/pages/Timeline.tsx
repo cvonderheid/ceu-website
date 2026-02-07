@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { addMonths, format, parseISO, subMonths } from "date-fns";
-import { AlertTriangle, Dot } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import CertificatePreview from "@/components/CertificatePreview";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ type EventCourseMeta = {
 type EventCertificateMeta = {
   id: string;
   filename: string;
+  content_type?: string | null;
   created_at: string;
 };
 
@@ -553,17 +555,29 @@ export default function Timeline() {
                     <div className="text-xs font-semibold text-ink/60">Certificates</div>
                     {selectedMeta?.certificates && selectedMeta.certificates.length > 0 ? (
                       selectedMeta.certificates.map((cert) => (
-                        <a
+                        <div
                           key={cert.id}
-                          href={`/api/certificates/${cert.id}/download`}
-                          className="flex items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-xs"
+                          className="space-y-2 rounded-lg border border-stroke/60 p-2 text-xs"
                         >
-                          <span className="flex items-center gap-2">
-                            <Dot className="h-4 w-4" />
-                            {cert.filename}
-                          </span>
-                          <span className="text-ink/60">{formatDate(cert.created_at)}</span>
-                        </a>
+                          <div className="flex items-start gap-2">
+                            <CertificatePreview
+                              certificateId={cert.id}
+                              contentType={cert.content_type}
+                              filename={cert.filename}
+                              className="h-16 w-16"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{cert.filename}</div>
+                              <div className="text-ink/60">{formatDate(cert.created_at)}</div>
+                            </div>
+                          </div>
+                          <a
+                            href={`/api/certificates/${cert.id}/download`}
+                            className="text-accent hover:underline"
+                          >
+                            Download
+                          </a>
+                        </div>
                       ))
                     ) : (
                       <div className="text-xs text-ink/60">No certificates uploaded.</div>
@@ -700,17 +714,29 @@ export default function Timeline() {
                   <div className="text-xs text-ink/60">No certificates uploaded.</div>
                 )}
                 {selectedCourse.certificates.map((cert) => (
-                  <a
+                  <div
                     key={cert.id}
-                    href={`/api/certificates/${cert.id}/download`}
-                    className="flex items-center justify-between rounded-lg border border-stroke/60 px-3 py-2 text-xs"
+                    className="space-y-2 rounded-lg border border-stroke/60 p-2 text-xs"
                   >
-                    <span className="flex items-center gap-2">
-                      <Dot className="h-4 w-4" />
-                      {cert.filename}
-                    </span>
-                    <span className="text-ink/60">{formatDate(cert.created_at)}</span>
-                  </a>
+                    <div className="flex items-start gap-2">
+                      <CertificatePreview
+                        certificateId={cert.id}
+                        contentType={cert.content_type}
+                        filename={cert.filename}
+                        className="h-16 w-16"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">{cert.filename}</div>
+                        <div className="text-ink/60">{formatDate(cert.created_at)}</div>
+                      </div>
+                    </div>
+                    <a
+                      href={`/api/certificates/${cert.id}/download`}
+                      className="text-accent hover:underline"
+                    >
+                      Download
+                    </a>
+                  </div>
                 ))}
               </div>
               <div className="space-y-2">

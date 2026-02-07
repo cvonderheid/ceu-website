@@ -13,8 +13,9 @@ export default function Settings() {
     queryFn: api.getMe,
   });
 
-  const accountName = me?.display_name || me?.email || null;
-  const externalId = me?.external_user_id || null;
+  const accountEmail = me?.email || null;
+  const displayName =
+    me?.display_name && me.display_name !== me.email ? me.display_name : null;
 
   return (
     <div>
@@ -45,11 +46,13 @@ export default function Settings() {
             {!isLoading && !isError && (
               <>
                 <div>
-                  <span className="font-semibold">User:</span> {accountName ?? "Not available"}
+                  <span className="font-semibold">Email:</span> {accountEmail ?? "Not available"}
                 </div>
-                <div>
-                  <span className="font-semibold">External ID:</span> {externalId ?? "Not available"}
-                </div>
+                {displayName && (
+                  <div>
+                    <span className="font-semibold">Name:</span> {displayName}
+                  </div>
+                )}
               </>
             )}
             <Button

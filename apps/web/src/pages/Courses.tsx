@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileUp, Link2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import CertificatePreview, { isImageCertificate } from "@/components/CertificatePreview";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -177,6 +178,17 @@ export default function Courses() {
     setCourseSheetOpen(true);
   };
 
+  const openCreateCourse = () => {
+    setEditCourse(null);
+    setCourseForm({
+      title: "",
+      provider: "",
+      completed_at: "",
+      hours: "",
+    });
+    setCourseSheetOpen(true);
+  };
+
   const openApplySheet = (course: Course) => {
     setApplyCourse(course);
     setSelectedCycleIds([]);
@@ -228,9 +240,17 @@ export default function Courses() {
         title="Courses"
         subtitle="Track finished coursework and apply hours to cycles."
         actions={
-          <Sheet open={courseSheetOpen} onOpenChange={setCourseSheetOpen}>
+          <Sheet
+            open={courseSheetOpen}
+            onOpenChange={(open) => {
+              setCourseSheetOpen(open);
+              if (!open) {
+                setEditCourse(null);
+              }
+            }}
+          >
             <SheetTrigger asChild>
-              <Button variant="soft">
+              <Button variant="soft" onClick={openCreateCourse}>
                 <Plus className="h-4 w-4" />
                 Add course
               </Button>
@@ -519,11 +539,27 @@ export default function Courses() {
               {(certsQuery.data || []).map((cert: Certificate) => (
                 <div
                   key={cert.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stroke/60 px-3 py-2 text-sm"
+                  className="space-y-3 rounded-lg border border-stroke/60 bg-surface/80 p-3 text-sm"
                 >
-                  <div>
-                    <div className="font-semibold">{cert.filename}</div>
-                    <div className="text-xs text-ink/60">{cert.content_type || "file"}</div>
+                  <div className="flex items-start gap-3">
+                    <CertificatePreview
+                      certificateId={cert.id}
+                      contentType={cert.content_type}
+                      filename={cert.filename}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold">
+                        {isImageCertificate(cert.content_type, cert.filename)
+                          ? "Certificate photo"
+                          : cert.filename}
+                      </div>
+                      <div className="text-xs text-ink/60">
+                        Uploaded {formatDate(cert.created_at)} · {cert.content_type || "file"}
+                      </div>
+                      {isImageCertificate(cert.content_type, cert.filename) && (
+                        <div className="truncate text-xs text-ink/60">{cert.filename}</div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <a
