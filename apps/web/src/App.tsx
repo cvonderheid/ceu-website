@@ -11,15 +11,22 @@ import Settings from "@/pages/Settings";
 import Timeline from "@/pages/Timeline";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const [ready, setReady] = useState(!isAuthConfigured());
+  const authConfigured = isAuthConfigured();
+  const allowUnauthed = import.meta.env.DEV;
+  const [ready, setReady] = useState(!authConfigured && allowUnauthed);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
     const run = async () => {
-      if (!isAuthConfigured()) {
+      if (!authConfigured) {
         if (active) {
-          setReady(true);
+          if (allowUnauthed) {
+            setReady(true);
+          } else {
+            setConfigError("Authentication is not configured for this deployment.");
+          }
         }
         return;
       }
@@ -41,7 +48,11 @@ function RequireAuth({ children }: { children: JSX.Element }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [allowUnauthed, authConfigured]);
+
+  if (configError) {
+    return <div className="p-6 text-sm text-danger">{configError}</div>;
+  }
 
   if (!ready) {
     return <div className="p-6 text-sm text-ink/70">Redirecting to sign in...</div>;

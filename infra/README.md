@@ -37,9 +37,10 @@ Optional overrides:
 
 - `ceuplanner-infra:existingHostedZoneId` (if you later stop managing zone creation)
 - `ceuplanner-infra:authSubdomain` (default `auth`)
+- `ceuplanner-infra:authCallbackUrls` (default `https://ceuplanner.com/auth/callback`)
+- `ceuplanner-infra:authLogoutUrls` (default `https://ceuplanner.com`)
 - `ceuplanner-infra:apiImageTag` (default `latest`)
 - `ceuplanner-infra:deployApiService` (default `false`; set `true` after first image push)
-- `ceuplanner-infra:authCallbackUrls` and `ceuplanner-infra:authLogoutUrls`
 
 ## Deploy
 

@@ -1,11 +1,16 @@
 config:
   aws:region: us-east-1
   ceuplanner-infra:domainName: ceuplanner.com
-  ceuplanner-infra:createHostedZone: "true"
+  ceuplanner-infra:createHostedZone: "false"
+  ceuplanner-infra:existingHostedZoneId: Z06526242YNOFL8JEQXRY
   ceuplanner-infra:dbInstanceClass: db.t4g.micro
   ceuplanner-infra:dbAllocatedStorage: "20"
-  ceuplanner-infra:apiImageTag: latest
+  ceuplanner-infra:apiImageTag: e53704b
   ceuplanner-infra:deployApiService: "false"
   ceuplanner-infra:dbName: ceuplanner
   ceuplanner-infra:dbUsername: ceu_admin
+  ceuplanner-infra:authCallbackUrls:
+    - https://ceuplanner.com/auth/callback
+  ceuplanner-infra:authLogoutUrls:
+    - https://ceuplanner.com
 encryptionsalt: v1:k/5nnmj/FQk=:v1:Pa+hYK7yEMpbDW3T:rZ7E3ECXRV4buRKFt5ZCqNMsU7PKlQ==

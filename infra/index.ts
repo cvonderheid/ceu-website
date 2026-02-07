@@ -18,7 +18,8 @@ const dbAllocatedStorage = config.getNumber("dbAllocatedStorage") ?? 20;
 const apiImageTag = config.get("apiImageTag") ?? "latest";
 const apiContainerPort = config.get("apiContainerPort") ?? "8000";
 const deployApiService = config.getBoolean("deployApiService") ?? false;
-const authCallbackUrls = config.getObject<string[]>("authCallbackUrls") ?? [`https://${domainName}`];
+const authCallbackUrls =
+  config.getObject<string[]>("authCallbackUrls") ?? [`https://${domainName}/auth/callback`];
 const authLogoutUrls = config.getObject<string[]>("authLogoutUrls") ?? [`https://${domainName}`];
 
 if (!createHostedZone && !existingHostedZoneId) {
@@ -417,38 +418,6 @@ const authCertificateValidation = new aws.acm.CertificateValidation(
   { provider: usEast1 }
 );
 
-const userPoolDomain = new aws.cognito.UserPoolDomain("userPoolDomain", {
-  domain: authDomainName,
-  userPoolId: userPool.id,
-  certificateArn: authCertificateValidation.certificateArn,
-});
-
-new aws.route53.Record("authDomainAliasA", {
-  zoneId: hostedZoneId,
-  name: authDomainName,
-  type: "A",
-  aliases: [
-    {
-      name: userPoolDomain.cloudfrontDistribution,
-      zoneId: "Z2FDTNDATAQYW2",
-      evaluateTargetHealth: false,
-    },
-  ],
-});
-
-new aws.route53.Record("authDomainAliasAAAA", {
-  zoneId: hostedZoneId,
-  name: authDomainName,
-  type: "AAAA",
-  aliases: [
-    {
-      name: userPoolDomain.cloudfrontDistribution,
-      zoneId: "Z2FDTNDATAQYW2",
-      evaluateTargetHealth: false,
-    },
-  ],
-});
-
 let apiService: aws.apprunner.Service | undefined;
 let apiOriginDomainName: pulumi.Input<string> | undefined;
 
@@ -729,7 +698,7 @@ new aws.s3.BucketPolicy("webBucketPolicy", {
   policy: webBucketPolicyDoc.json,
 });
 
-new aws.route53.Record("apexAliasA", {
+const apexAliasA = new aws.route53.Record("apexAliasA", {
   zoneId: hostedZoneId,
   name: domainName,
   type: "A",
@@ -776,6 +745,45 @@ new aws.route53.Record("wwwAliasAAAA", {
     {
       name: webDistribution.domainName,
       zoneId: webDistribution.hostedZoneId,
+      evaluateTargetHealth: false,
+    },
+  ],
+});
+
+const userPoolDomain = new aws.cognito.UserPoolDomain(
+  "userPoolDomain",
+  {
+    domain: authDomainName,
+    userPoolId: userPool.id,
+    certificateArn: authCertificateValidation.certificateArn,
+  },
+  {
+    // Cognito custom domain validation requires the parent domain apex A record to resolve.
+    dependsOn: [apexAliasA],
+  }
+);
+
+new aws.route53.Record("authDomainAliasA", {
+  zoneId: hostedZoneId,
+  name: authDomainName,
+  type: "A",
+  aliases: [
+    {
+      name: userPoolDomain.cloudfrontDistribution,
+      zoneId: "Z2FDTNDATAQYW2",
+      evaluateTargetHealth: false,
+    },
+  ],
+});
+
+new aws.route53.Record("authDomainAliasAAAA", {
+  zoneId: hostedZoneId,
+  name: authDomainName,
+  type: "AAAA",
+  aliases: [
+    {
+      name: userPoolDomain.cloudfrontDistribution,
+      zoneId: "Z2FDTNDATAQYW2",
       evaluateTargetHealth: false,
     },
   ],

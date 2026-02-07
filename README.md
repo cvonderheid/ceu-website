@@ -33,6 +33,47 @@ make db-down
 
 Override any of these env vars as needed.
 
+## ECR image release
+
+Build/tag/push the production image to ECR:
+
+```bash
+make image-release
+```
+
+Run full release flow (tests/build + preview + approval-gated deploy):
+
+```bash
+make all
+```
+
+`make all` now runs this flow:
+1. run tests and infra build
+2. build/tag Docker image locally (no push yet)
+3. set `ceuplanner-infra:apiImageTag` in Pulumi config
+4. run `pulumi preview`
+5. prompt for approval
+6. if approved: push image(s), run `pulumi up`, build web, sync to S3, invalidate CloudFront
+
+The web deploy step now fails fast if Cognito outputs are missing/unknown so unauthenticated bundles are not published.
+
+Defaults:
+- `ECR_REPO=339757511793.dkr.ecr.us-east-1.amazonaws.com/ceu-website`
+- `IMAGE_TAG=<git short sha>`
+- `PUSH_LATEST=1` (also tags/pushes `latest`)
+- `DOCKER_PLATFORM=linux/amd64`
+- `PULUMI_STACK=prod`
+- `PULUMI_DIR=infra`
+- `PULUMI_CONFIG_KEY=ceuplanner-infra:apiImageTag`
+
+Examples:
+
+```bash
+make image-release IMAGE_TAG=v0.1.0
+make image-release PUSH_LATEST=0
+make all IMAGE_TAG=v0.1.0
+```
+
 ## Deployment auth and storage env
 
 For AWS deployment with Cognito and S3-backed certificates, configure:

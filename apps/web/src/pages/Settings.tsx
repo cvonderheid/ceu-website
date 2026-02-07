@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,13 @@ import { api } from "@/lib/api";
 import { logout } from "@/lib/auth";
 
 export default function Settings() {
-  const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.getMe });
+  const { data: me, isLoading, isError, refetch } = useQuery({
+    queryKey: ["me"],
+    queryFn: api.getMe,
+  });
+
+  const accountName = me?.display_name || me?.email || null;
+  const externalId = me?.external_user_id || null;
 
   return (
     <div>
@@ -19,13 +26,32 @@ export default function Settings() {
             <CardTitle>Account</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-ink/80">
-            <div>
-              <span className="font-semibold">User:</span>{" "}
-              {me?.display_name || me?.email || "Unknown"}
-            </div>
-            <div>
-              <span className="font-semibold">External ID:</span> {me?.external_user_id}
-            </div>
+            {isLoading && <div className="text-ink/70">Loading account details...</div>}
+            {isError && (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-danger">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    We could not load account details right now.
+                    <div className="mt-1">
+                      <Button size="sm" variant="outline" onClick={() => void refetch()}>
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {!isLoading && !isError && (
+              <>
+                <div>
+                  <span className="font-semibold">User:</span> {accountName ?? "Not available"}
+                </div>
+                <div>
+                  <span className="font-semibold">External ID:</span> {externalId ?? "Not available"}
+                </div>
+              </>
+            )}
             <Button
               variant="outline"
               size="sm"
