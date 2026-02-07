@@ -487,18 +487,14 @@ export default function Licenses() {
         >
           <SheetHeader>
             <SheetTitle>{editCycle ? "Edit cycle" : "New cycle"}</SheetTitle>
-            <SheetDescription>
-              Enter dates in YYYY-MM-DD format. End date must be after start date.
-            </SheetDescription>
+            <SheetDescription>Cycle end date must be after start date.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cycle_start">Start date</Label>
               <Input
                 id="cycle_start"
-                type="text"
-                inputMode="numeric"
-                placeholder="YYYY-MM-DD"
+                type="date"
                 value={cycleForm.cycle_start}
                 onChange={(event) =>
                   setCycleForm((prev) => ({ ...prev, cycle_start: event.target.value }))
@@ -509,9 +505,7 @@ export default function Licenses() {
               <Label htmlFor="cycle_end">End date</Label>
               <Input
                 id="cycle_end"
-                type="text"
-                inputMode="numeric"
-                placeholder="YYYY-MM-DD"
+                type="date"
                 value={cycleForm.cycle_end}
                 onChange={(event) =>
                   setCycleForm((prev) => ({ ...prev, cycle_end: event.target.value }))
