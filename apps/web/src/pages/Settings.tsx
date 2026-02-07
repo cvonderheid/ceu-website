@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle } from "lucide-react";
+import { CircleDashed } from "lucide-react";
 
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -29,13 +29,13 @@ export default function Settings() {
             {isLoading && <div className="text-ink/70">Loading account details...</div>}
             {isError && (
               <div className="space-y-2">
-                <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-danger">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="flex items-start gap-2 rounded-lg border border-stroke/70 bg-surface/70 px-3 py-2 text-ink/75">
+                  <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-ink/55" />
                   <div>
-                    We could not load account details right now.
+                    We are still loading account details. You can continue using the app.
                     <div className="mt-1">
-                      <Button size="sm" variant="outline" onClick={() => void refetch()}>
-                        Retry
+                      <Button size="sm" variant="ghost" className="h-8 px-2 text-ink/70" onClick={() => void refetch()}>
+                        Refresh
                       </Button>
                     </div>
                   </div>

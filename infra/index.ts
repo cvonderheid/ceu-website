@@ -442,6 +442,8 @@ if (deployApiService) {
             COGNITO_USER_POOL_ID: userPool.id,
             COGNITO_USER_POOL_CLIENT_ID: userPoolClient.id,
             COGNITO_REGION: awsRegion,
+            RUN_MIGRATIONS_ON_STARTUP: "true",
+            ALEMBIC_CONFIG: "/app/alembic.ini",
           },
         },
       },
@@ -467,7 +469,10 @@ if (deployApiService) {
     },
   });
 
-  apiOriginDomainName = apiService.serviceUrl.apply((serviceUrl) => new URL(serviceUrl).hostname);
+  apiOriginDomainName = apiService.serviceUrl.apply((serviceUrl) => {
+    const normalizedServiceUrl = serviceUrl.includes("://") ? serviceUrl : `https://${serviceUrl}`;
+    return new URL(normalizedServiceUrl).hostname;
+  });
 }
 
 const apiOriginRequestPolicy = new aws.cloudfront.OriginRequestPolicy("apiOriginRequestPolicy", {

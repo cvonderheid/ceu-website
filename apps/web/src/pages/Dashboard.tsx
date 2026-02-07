@@ -49,11 +49,11 @@ export default function Dashboard() {
               </p>
             </div>
             {isError && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-                <AlertTriangle className="h-4 w-4" />
-                Progress data could not be loaded yet.
-                <Button size="sm" variant="outline" onClick={() => void refetch()}>
-                  Retry
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stroke/70 bg-surface/70 px-3 py-2 text-sm text-ink/75">
+                <CircleDashed className="h-4 w-4 text-ink/55" />
+                We are still connecting your progress. You can start setup now.
+                <Button size="sm" variant="ghost" className="h-8 px-2 text-ink/70" onClick={() => void refetch()}>
+                  Refresh
                 </Button>
               </div>
             )}

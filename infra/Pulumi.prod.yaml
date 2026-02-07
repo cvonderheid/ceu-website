@@ -5,8 +5,8 @@ config:
   ceuplanner-infra:existingHostedZoneId: Z06526242YNOFL8JEQXRY
   ceuplanner-infra:dbInstanceClass: db.t4g.micro
   ceuplanner-infra:dbAllocatedStorage: "20"
-  ceuplanner-infra:apiImageTag: e53704b
-  ceuplanner-infra:deployApiService: "false"
+  ceuplanner-infra:apiImageTag: "8902825"
+  ceuplanner-infra:deployApiService: "true"
   ceuplanner-infra:dbName: ceuplanner
   ceuplanner-infra:dbUsername: ceu_admin
   ceuplanner-infra:authCallbackUrls:

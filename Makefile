@@ -1,18 +1,20 @@
-.PHONY: all predeploy deploy-apply approve-deploy dev test migrate db-up db-down demo demo-reset demo-dev infra-build ecr-login image-build image-push image-release pulumi-set-tag pulumi-preview pulumi-up web-build web-sync web-deploy
+.PHONY: all predeploy deploy-apply approve-deploy dev test migrate db-up db-down demo demo-reset demo-dev infra-build ecr-login image-build image-push verify-image-tag image-release pulumi-set-tag pulumi-preview pulumi-up web-build web-sync web-deploy
 
-DATABASE_URL ?= postgresql+psycopg://ce_user:ce_pass@localhost:5432/ce_tracker
+DB_PORT ?= 5432
+DATABASE_URL ?= postgresql+psycopg://ce_user:ce_pass@localhost:$(DB_PORT)/ce_tracker
 DEV_USER_ID ?= dev-user-1
 DEV_EMAIL ?= dev@example.com
 AWS_REGION ?= us-east-1
-ECR_REPO ?= 339757511793.dkr.ecr.us-east-1.amazonaws.com/ceu-website
+ECR_REPO ?= $(shell cd $(PULUMI_DIR) && pulumi stack output apiRepositoryUrl -s $(PULUMI_STACK) 2>/dev/null || echo 339757511793.dkr.ecr.us-east-1.amazonaws.com/prod-ceuplanner-api)
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 PUSH_LATEST ?= 1
 DOCKER_PLATFORM ?= linux/amd64
+DOCKER_PROVENANCE ?= false
 PULUMI_STACK ?= prod
 PULUMI_DIR ?= infra
 PULUMI_CONFIG_KEY ?= ceuplanner-infra:apiImageTag
 
-export DATABASE_URL DEV_USER_ID DEV_EMAIL
+export DATABASE_URL DEV_USER_ID DEV_EMAIL DB_PORT
 
 all:
 	$(MAKE) predeploy
@@ -29,6 +31,7 @@ predeploy:
 deploy-apply:
 	$(MAKE) ecr-login
 	$(MAKE) image-push
+	$(MAKE) verify-image-tag
 	$(MAKE) pulumi-up
 	$(MAKE) web-deploy
 
@@ -67,19 +70,40 @@ demo-check: demo
 	cd apps/api && uv run python -m ce_api.scripts.demo_check
 
 ecr-login:
-	aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(ECR_REPO)
+	@if [ -z "$(ECR_REPO)" ] || [ "$(ECR_REPO)" = "[unknown]" ]; then echo "ECR_REPO is not set. Set it or ensure Pulumi stack outputs are available."; exit 1; fi
+	@ECR_REGISTRY="$(ECR_REPO)"; \
+	ECR_REGISTRY=$${ECR_REGISTRY%%/*}; \
+	aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $$ECR_REGISTRY
 
 image-build:
-	docker build --platform $(DOCKER_PLATFORM) -f Dockerfile.prod -t $(ECR_REPO):$(IMAGE_TAG) .
+	@if [ -z "$(ECR_REPO)" ] || [ "$(ECR_REPO)" = "[unknown]" ]; then echo "ECR_REPO is not set. Set it or ensure Pulumi stack outputs are available."; exit 1; fi
+	docker build --platform $(DOCKER_PLATFORM) --provenance=$(DOCKER_PROVENANCE) -f Dockerfile.prod -t $(ECR_REPO):$(IMAGE_TAG) .
 ifeq ($(PUSH_LATEST),1)
 	docker tag $(ECR_REPO):$(IMAGE_TAG) $(ECR_REPO):latest
 endif
 
 image-push:
+	@if [ -z "$(ECR_REPO)" ] || [ "$(ECR_REPO)" = "[unknown]" ]; then echo "ECR_REPO is not set. Set it or ensure Pulumi stack outputs are available."; exit 1; fi
 	docker push $(ECR_REPO):$(IMAGE_TAG)
 ifeq ($(PUSH_LATEST),1)
 	docker push $(ECR_REPO):latest
 endif
+
+verify-image-tag:
+	@if [ -z "$(ECR_REPO)" ] || [ "$(ECR_REPO)" = "[unknown]" ]; then echo "ECR_REPO is not set. Set it or ensure Pulumi stack outputs are available."; exit 1; fi
+	@ECR_REPO_NAME="$(ECR_REPO)"; \
+	ECR_REPO_NAME=$${ECR_REPO_NAME##*/}; \
+	if ! aws ecr describe-images --region $(AWS_REGION) --repository-name "$$ECR_REPO_NAME" --image-ids imageTag=$(IMAGE_TAG) >/dev/null 2>&1; then \
+		echo "Image tag $(IMAGE_TAG) was not found in ECR repository $$ECR_REPO_NAME."; \
+		echo "Stop: verify your push target and rerun image push before pulumi up."; \
+		exit 1; \
+	fi; \
+	if [ "$(PUSH_LATEST)" = "1" ] && ! aws ecr describe-images --region $(AWS_REGION) --repository-name "$$ECR_REPO_NAME" --image-ids imageTag=latest >/dev/null 2>&1; then \
+		echo "Expected latest tag was not found in ECR repository $$ECR_REPO_NAME."; \
+		echo "Stop: rerun image push before pulumi up."; \
+		exit 1; \
+	fi; \
+	echo "Verified ECR image availability for $(ECR_REPO):$(IMAGE_TAG)"
 
 image-release: ecr-login image-build image-push
 

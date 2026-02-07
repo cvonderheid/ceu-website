@@ -53,15 +53,16 @@ make all
 3. set `ceuplanner-infra:apiImageTag` in Pulumi config
 4. run `pulumi preview`
 5. prompt for approval
-6. if approved: push image(s), run `pulumi up`, build web, sync to S3, invalidate CloudFront
+6. if approved: push image(s), verify ECR tag presence, run `pulumi up`, build web, sync to S3, invalidate CloudFront
 
-The web deploy step now fails fast if Cognito outputs are missing/unknown so unauthenticated bundles are not published.
+The deploy flow now fails fast if expected image tags are missing in ECR or if Cognito outputs are missing/unknown for the web bundle.
 
 Defaults:
-- `ECR_REPO=339757511793.dkr.ecr.us-east-1.amazonaws.com/ceu-website`
+- `ECR_REPO=<apiRepositoryUrl Pulumi output>` (fallback `339757511793.dkr.ecr.us-east-1.amazonaws.com/prod-ceuplanner-api`)
 - `IMAGE_TAG=<git short sha>`
 - `PUSH_LATEST=1` (also tags/pushes `latest`)
 - `DOCKER_PLATFORM=linux/amd64`
+- `DOCKER_PROVENANCE=false` (avoids OCI attestation manifests that can break some runtimes)
 - `PULUMI_STACK=prod`
 - `PULUMI_DIR=infra`
 - `PULUMI_CONFIG_KEY=ceuplanner-infra:apiImageTag`

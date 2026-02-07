@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
 
 from ce_api.deps import get_current_user
 from ce_api.routers import cycles_router, state_licenses_router, timeline_router
@@ -15,10 +18,27 @@ from ce_api.schemas import UserMe
 from ce_api.storage import ensure_cert_storage_dir
 
 STATIC_DIR = Path(os.getenv("STATIC_DIR", Path(__file__).resolve().parents[2] / "static"))
+LOGGER = logging.getLogger(__name__)
+
+
+def _should_run_migrations_on_startup() -> bool:
+    return os.getenv("RUN_MIGRATIONS_ON_STARTUP", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _run_migrations_on_startup() -> None:
+    if not _should_run_migrations_on_startup():
+        return
+
+    config_path = os.getenv("ALEMBIC_CONFIG", "alembic.ini")
+    LOGGER.info("Running startup migrations with config '%s'", config_path)
+
+    alembic_cfg = AlembicConfig(config_path)
+    alembic_command.upgrade(alembic_cfg, "head")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _run_migrations_on_startup()
     ensure_cert_storage_dir()
     yield
 
